@@ -2,7 +2,8 @@ image: alpine/edge
 packages:
   - meson
   - samurai
-  - sqlite
+  - sqlite-dev
+  - util-linux-dev  
 tasks:
   - build: |
       cd zkc
