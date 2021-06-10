@@ -19,7 +19,7 @@ int
 new(sqlite3 *db);
 
 int
-inbox(sqlite3 *db);
+inbox(sqlite3 *db, int head);
 
 int
 inbox_callback(void *not_used, int argc, char **argv, char **col_names);

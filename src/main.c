@@ -20,12 +20,16 @@ main(int argc, char **argv)
 			rc = create_tables(db);
 			if (rc != SQLITE_OK)
 				goto end;
-			printf("zkc tables created\n");
+			printf("zkc initialized\n");
 		} else if (!strcmp(argv[1], "inbox")) {
 			printf("Inbox:\n");
-			rc = inbox(db);
+			rc = inbox(db, 0);
 			if (rc != SQLITE_OK)
 				goto end;
+		} else if (!strcmp(argv[1], "head")) {
+			rc = inbox(db, 1);
+			if (rc != SQLITE_OK)
+				goto end;			
 		} else if (!strcmp(argv[1], "new")) {
 			rc = new(db);
 			if (rc != SQLITE_OK)

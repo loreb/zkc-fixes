@@ -2,6 +2,7 @@
 #include <sqlite3.h>
 #include <uuid/uuid.h>
 #include <stdlib.h>
+#include <string.h>
 #include "app.h"
 
 void
@@ -13,7 +14,9 @@ help(void)
 	       "help (default) - display commands\n"
 	       "init - create tables\n"
 	       "new - create new zettel in inbox\n"
-	       "inbox - list zettels in inbox\n");
+	       "inbox - list zettels in inbox\n"
+	       "head - show first zettel in inbox\n"
+	      );
 }
 
 int
@@ -47,9 +50,9 @@ create_tables(sqlite3 *db)
 {
 	const char *create_notes = "CREATE TABLE IF NOT EXISTS notes("
 		"id INTEGER PRIMARY KEY, "
-		"uuid VARCHAR(36), "
-		"body TEXT, "
-		"date DATETIME DEFAULT CURRENT_TIMESTAMP"
+		"uuid VARCHAR(36) NOT NULL, "
+		"body TEXT NOT NULL, "
+		"date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
 		");";
 
 	int rc = sql_exec(db, create_notes);
@@ -58,7 +61,7 @@ create_tables(sqlite3 *db)
 
 	const char *create_tags = "CREATE TABLE IF NOT EXISTS tags("
 		"id INTEGER PRIMARY KEY, "
-		"body TEXT"
+		"body TEXT NOT NULL"
 		");";
 
 	rc = sql_exec(db, create_tags);
@@ -66,8 +69,9 @@ create_tables(sqlite3 *db)
 		return rc;
 
 	const char *create_note_tags = "CREATE TABLE IF NOT EXISTS note_tags("
-		"note_id INTEGER, "
-		"tag_id INTEGER, "
+		"id INTEGER PRIMARY KEY, "
+		"note_id INTEGER NOT NULL, "
+		"tag_id INTEGER NOT NULL, "
 		"FOREIGN KEY(note_id) REFERENCES notes(id), "
 		"FOREIGN KEY(tag_id) REFERENCES tags(id)"		
 		")";
@@ -77,7 +81,8 @@ create_tables(sqlite3 *db)
 		return rc;
 
 	const char *create_inbox = "CREATE TABLE IF NOT EXISTS inbox("
-		"note_id INTEGER, "
+		"id INTEGER PRIMARY KEY, "
+		"note_id INTEGER NOT NULL, "
 		"FOREIGN KEY(note_id) REFERENCES notes(id)"
 		");";
 
@@ -86,8 +91,9 @@ create_tables(sqlite3 *db)
 		return rc;
 
 	const char *create_links = "CREATE TABLE IF NOT EXISTS links("
-		"a_id INTEGER, "
-		"b_id INTEGER, "
+		"id INTEGER PRIMARY KEY, "
+		"a_id INTEGER NOT NULL, "
+		"b_id INTEGER NOT NULL, "
 		"FOREIGN KEY(a_id) REFERENCES notes(id), "
 		"FOREIGN KEY(b_id) REFERENCES notes(id)"
 		");";
@@ -116,16 +122,95 @@ new(sqlite3 *db)
 	sprintf(command, "$EDITOR %s", uuid);
 
 	system(command);
-	return 0;
+
+	FILE *f = fopen(uuid, "rb");
+	if (!f)
+		return 0;
+
+	// TODO: Add error check
+	fseek(f, 0, SEEK_END);
+	long length = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	char *buffer = (char*)malloc(sizeof(char)*length);
+	
+	if (buffer)
+		fread(buffer, sizeof(char), length, f);
+
+	fclose(f);
+	remove(uuid);
+
+	int rc = SQLITE_OK;
+
+	if (buffer) {
+		char *sql = "INSERT INTO notes(uuid, body) VALUES(?, ?);";
+		sqlite3_stmt *stmt;
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			goto end;
+		}
+
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+		sqlite3_bind_text(stmt, 2, buffer, strlen(buffer), SQLITE_TRANSIENT);
+
+		rc = sqlite3_step(stmt);
+
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+			goto end;
+		}
+
+		sqlite3_finalize(stmt);
+	} else {
+		goto end;
+	}
+
+	int note_id = sqlite3_last_insert_rowid(db);
+
+	char *sql = "INSERT INTO inbox(note_id) VALUES(?);";
+	sqlite3_stmt *stmt;
+	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		goto end;
+	}
+
+	sqlite3_bind_int(stmt, 1, note_id);
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		goto end;
+	}
+
+	sqlite3_finalize(stmt);
+	
+end:
+	if (buffer != NULL)
+		free(buffer);
+
+	return rc;
 }
 
 int
-inbox(sqlite3 *db)
+inbox(sqlite3 *db, int head)
 {
-	char *sql = "SELECT notes.uuid, notes.body "
-		"FROM notes "
-		"INNER JOIN inbox "
-		"ON inbox.note_id = notes.id";
+	char *sql;
+	if (head) {
+		sql = "SELECT notes.uuid, notes.date, notes.body "
+			"FROM notes "
+			"INNER JOIN inbox "
+			"ON inbox.note_id = notes.id "
+			"LIMIT 1;";
+	} else {
+		sql = "SELECT notes.uuid, notes.date, notes.body "
+			"FROM notes "
+			"INNER JOIN inbox "
+			"ON inbox.note_id = notes.id";
+	}
 
 	char *err_msg = 0;
 	int rc = sqlite3_exec(db, sql, inbox_callback, 0, &err_msg);
@@ -142,10 +227,19 @@ inbox(sqlite3 *db)
 int
 inbox_callback(void *not_used, int argc, char **argv, char **col_names)
 {
-	for (int i = 0; i < argc; i++) {
-		printf("%s = %s\n", col_names[i], argv[i] ? argv[i] : "NULL");
-	}
+	char *uuid = argv[0];
+	char *date = argv[1];
+	char *body = argv[2];
 
-	printf("\n");
+	uuid[4] = '\0';
+
+	if (strlen(body) > 5)
+		body[5] = '\0';
+	
+	// for (int i = 0; i < argc; i++) {
+	//	printf("%s = %s\n", col_names[i], argv[i] ? argv[i] : "NULL");
+	//}
+
+	printf("%s - %s - %s...\n", uuid, date, body);
 	return 0;
 }
