@@ -18,6 +18,8 @@ help(void)
 	       "head - show first zettel in inbox\n"
 	       "view - view zettel by uuid\n"
 	       "edit - edit zettel by uuid\n"
+	       "slurp - load file into note\n"
+	       "spit - write note to file"
 	      );
 }
 
@@ -206,12 +208,14 @@ inbox(sqlite3 *db, int head)
 			"FROM notes "
 			"INNER JOIN inbox "
 			"ON inbox.note_id = notes.id "
+			"ORDER BY date DESC "
 			"LIMIT 1;";
 	} else {
 		sql = "SELECT notes.uuid, notes.date, notes.body "
 			"FROM notes "
 			"INNER JOIN inbox "
-			"ON inbox.note_id = notes.id";
+			"ON inbox.note_id = notes.id "
+			"ORDER BY date DESC;";
 	}
 
 	char *err_msg = 0;
@@ -377,4 +381,120 @@ end:
 		free(buffer);	
 	
 	return rc;
+}
+
+int
+slurp(sqlite3 *db, const char *path)
+{
+	FILE *f = fopen(path, "rb");
+	if (!f) {
+		fprintf(stderr, "No file found at: %s\n", path);
+		return 1;
+	}
+
+	// TODO: Add error check
+	fseek(f, 0, SEEK_END);
+	long length = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	char *buffer = (char*)malloc(sizeof(char)*length);
+	
+	if (buffer)
+		fread(buffer, sizeof(char), length, f);
+
+	fclose(f);
+
+	int rc = SQLITE_OK;
+
+	if (buffer) {
+		char *sql = "INSERT INTO notes(uuid, body) VALUES(?, ?);";
+		sqlite3_stmt *stmt;
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			goto end;
+		}
+
+		char uuid[37];
+		uuid_t binuuid;
+		uuid_generate_random(binuuid);
+		uuid_unparse_lower(binuuid, uuid);
+		
+
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+		sqlite3_bind_text(stmt, 2, buffer, strlen(buffer), SQLITE_TRANSIENT);
+
+		rc = sqlite3_step(stmt);
+
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+			goto end;
+		}
+
+		sqlite3_finalize(stmt);
+	} else {
+		fprintf(stderr, "Not loading empty file\n");
+		goto end;
+	}
+
+	int note_id = sqlite3_last_insert_rowid(db);
+
+	char *sql = "INSERT INTO inbox(note_id) VALUES(?);";
+	sqlite3_stmt *stmt;
+	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		goto end;
+	}
+
+	sqlite3_bind_int(stmt, 1, note_id);
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		goto end;
+	}
+
+	sqlite3_finalize(stmt);
+	
+end:
+	if (buffer != NULL)
+		free(buffer);
+
+	return rc;	
+}
+
+int
+spit(sqlite3 *db, const char *uuid, const char *path)
+{
+	char *sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_ROW) {
+		fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	FILE *fw = fopen(path, "wb");
+	if (fw) {
+		fputs((char *)sqlite3_column_text(stmt, 0), fw);
+		fclose(fw);
+	}
+
+	sqlite3_finalize(stmt);
+
+	return SQLITE_OK;
 }

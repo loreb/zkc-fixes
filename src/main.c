@@ -35,7 +35,7 @@ main(int argc, char **argv)
 			if (rc != SQLITE_OK)
 				goto end;
 		} else {
-			printf("Invalid command: %s\n", argv[1]);
+			printf("Invalid command or missing arguments: %s\n", argv[1]);
 		}
 	} else if (argc == 3) {
 		if (!strcmp(argv[1], "view")) {
@@ -44,6 +44,18 @@ main(int argc, char **argv)
 				goto end;
 		} else if (!strcmp(argv[1], "edit")) {
 			rc = edit(db, argv[2]);
+			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "slurp")) {
+			rc = slurp(db, argv[2]);
+			if (rc != SQLITE_OK)
+				goto end;
+		} else {
+			printf("Invalid command: %s\n", argv[1]);
+		}
+	} else if (argc == 4) {
+		if (!strcmp(argv[1], "spit")) {
+			rc = spit(db, argv[2], argv[3]);
 			if (rc != SQLITE_OK)
 				goto end;
 		} else {

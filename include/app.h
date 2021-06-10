@@ -33,4 +33,10 @@ view(sqlite3 *db, const char *uuid);
 int
 edit(sqlite3 *db, const char *uuid);
 
+int
+slurp(sqlite3 *db, const char *path);
+
+int
+spit(sqlite3 *db, const char *uuid, const char *path);
+
 #endif
