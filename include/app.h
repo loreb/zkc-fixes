@@ -25,9 +25,6 @@ int
 inbox_callback(void *not_used, int argc, char **argv, char **col_names);
 
 int
-inbox_head_callback(void *not_used, int argc, char **argv, char **col_names);
-
-int
 view(sqlite3 *db, const char *uuid);
 
 int

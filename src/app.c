@@ -220,11 +220,7 @@ inbox(sqlite3 *db, int head)
 
 	char *err_msg = 0;
 	int rc;
-	if (head) {
-		rc = sqlite3_exec(db, sql, inbox_head_callback, 0, &err_msg);
-	} else {
-		rc = sqlite3_exec(db, sql, inbox_callback, 0, &err_msg);
-	}
+	rc = sqlite3_exec(db, sql, inbox_callback, 0, &err_msg);
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Failed to query inbox\n");
@@ -242,33 +238,15 @@ inbox_callback(void *not_used, int argc, char **argv, char **col_names)
 	char *date = argv[1];
 	char *body = argv[2];
 
-	uuid[4] = '\0';
+	if (strlen(body) > 16)
+		body[16] = '\0';
 
-	if (strlen(body) > 5)
-		body[5] = '\0';
+	// Replace newlines with spaces
+	for (size_t i = 0; i < 16; i++)
+		if (body[i] == '\n')
+			body[i] = ' ';
 	
 	printf("%s - %s - %s...\n", uuid, date, body);
-	return 0;
-}
-
-int
-inbox_head_callback(void *not_used, int argc, char **argv, char **col_names)
-{
-	char *uuid = argv[0];
-	char *date = argv[1];
-	char *body = argv[2];
-
-	long l = strlen(body);
-
-	if (l > 120)
-		body[120] = '\0';	
-	
-	printf("uuid: %s\ndate: %s\n%s", uuid, date, body);
-
-	if (l > 120)
-		printf("...");
-
-	printf("\n");
 	return 0;
 }
 
