@@ -37,6 +37,18 @@ main(int argc, char **argv)
 		} else {
 			printf("Invalid command: %s\n", argv[1]);
 		}
+	} else if (argc == 3) {
+		if (!strcmp(argv[1], "view")) {
+			rc = view(db, argv[2]);
+			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "edit")) {
+			rc = edit(db, argv[2]);
+			if (rc != SQLITE_OK)
+				goto end;
+		} else {
+			printf("Invalid command: %s\n", argv[1]);
+		}
 	} else {
 		help();
 	}

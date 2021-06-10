@@ -24,4 +24,13 @@ inbox(sqlite3 *db, int head);
 int
 inbox_callback(void *not_used, int argc, char **argv, char **col_names);
 
+int
+inbox_head_callback(void *not_used, int argc, char **argv, char **col_names);
+
+int
+view(sqlite3 *db, const char *uuid);
+
+int
+edit(sqlite3 *db, const char *uuid);
+
 #endif

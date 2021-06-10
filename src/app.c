@@ -16,6 +16,8 @@ help(void)
 	       "new - create new zettel in inbox\n"
 	       "inbox - list zettels in inbox\n"
 	       "head - show first zettel in inbox\n"
+	       "view - view zettel by uuid\n"
+	       "edit - edit zettel by uuid\n"
 	      );
 }
 
@@ -213,7 +215,12 @@ inbox(sqlite3 *db, int head)
 	}
 
 	char *err_msg = 0;
-	int rc = sqlite3_exec(db, sql, inbox_callback, 0, &err_msg);
+	int rc;
+	if (head) {
+		rc = sqlite3_exec(db, sql, inbox_head_callback, 0, &err_msg);
+	} else {
+		rc = sqlite3_exec(db, sql, inbox_callback, 0, &err_msg);
+	}
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Failed to query inbox\n");
@@ -236,10 +243,138 @@ inbox_callback(void *not_used, int argc, char **argv, char **col_names)
 	if (strlen(body) > 5)
 		body[5] = '\0';
 	
-	// for (int i = 0; i < argc; i++) {
-	//	printf("%s = %s\n", col_names[i], argv[i] ? argv[i] : "NULL");
-	//}
-
 	printf("%s - %s - %s...\n", uuid, date, body);
 	return 0;
+}
+
+int
+inbox_head_callback(void *not_used, int argc, char **argv, char **col_names)
+{
+	char *uuid = argv[0];
+	char *date = argv[1];
+	char *body = argv[2];
+
+	long l = strlen(body);
+
+	if (l > 120)
+		body[120] = '\0';	
+	
+	printf("uuid: %s\ndate: %s\n%s", uuid, date, body);
+
+	if (l > 120)
+		printf("...");
+
+	printf("\n");
+	return 0;
+}
+
+int
+view(sqlite3 *db, const char *uuid)
+{
+	char *sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1;";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_ROW) {
+		fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+	
+	printf("%s\n", (char *)sqlite3_column_text(stmt, 0));
+
+	sqlite3_finalize(stmt);
+	return SQLITE_OK;
+}
+
+int
+edit(sqlite3 *db, const char *uuid)
+{
+	char *sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_ROW) {
+		fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	FILE *fw = fopen(uuid, "wb");
+	if (fw) {
+		fputs((char *)sqlite3_column_text(stmt, 0), fw);
+		fclose(fw);
+	}
+
+	sqlite3_finalize(stmt);	
+
+	char command[100];
+	sprintf(command, "$EDITOR %s", uuid);
+
+	system(command);
+
+	FILE *fr = fopen(uuid, "rb");
+	if (!fr)
+		return 0;
+
+	// TODO: Add error check
+	fseek(fr, 0, SEEK_END);
+	long length = ftell(fr);
+	fseek(fr, 0, SEEK_SET);
+	char *buffer = (char*)malloc(sizeof(char) * length);
+	
+	if (buffer)
+		fread(buffer, sizeof(char), length, fr);
+
+	fclose(fr);
+	remove(uuid);
+
+	rc = SQLITE_OK;
+
+	if (buffer) {
+		char *sql = "UPDATE notes SET body = ? WHERE uuid = ?;";
+		sqlite3_stmt *stmt;
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			goto end;
+		}
+
+		sqlite3_bind_text(stmt, 1, buffer, strlen(buffer), SQLITE_TRANSIENT);		
+		sqlite3_bind_text(stmt, 2, uuid, strlen(uuid), SQLITE_STATIC);
+
+		rc = sqlite3_step(stmt);
+
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+			goto end;
+		}
+
+		sqlite3_finalize(stmt);
+	}
+
+end:
+	if (buffer != NULL)
+		free(buffer);	
+	
+	return rc;
 }
