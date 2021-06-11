@@ -22,7 +22,7 @@ int
 inbox(sqlite3 *db, int head);
 
 int
-inbox_callback(void *not_used, int argc, char **argv, char **col_names);
+note_summary_callback(void *not_used, int argc, char **argv, char **col_names);
 
 int
 view(sqlite3 *db, const char *uuid);
@@ -35,5 +35,14 @@ slurp(sqlite3 *db, const char *path);
 
 int
 spit(sqlite3 *db, const char *uuid, const char *path);
+
+int
+search(sqlite3 *db, const char *search_type, const char *search_word);
+
+int
+link(sqlite3 *db, const char *uuid_a, const char *uuid_b);
+
+int
+links(sqlite3 *db, const char *uuid);
 
 #endif

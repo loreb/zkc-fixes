@@ -50,12 +50,28 @@ main(int argc, char **argv)
 			rc = slurp(db, argv[2]);
 			if (rc != SQLITE_OK)
 				goto end;
+		} else if (!strcmp(argv[1], "search")) {
+			rc = search(db, "text", argv[2]);
+			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "links")) {
+			rc = links(db, argv[2]);
+			if (rc != SQLITE_OK)
+				goto end;			
 		} else {
 			printf("Invalid command: %s\n", argv[1]);
 		}
 	} else if (argc == 4) {
 		if (!strcmp(argv[1], "spit")) {
 			rc = spit(db, argv[2], argv[3]);
+			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "search")) {
+			rc = search(db, argv[2], argv[3]);
+			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "link")) {
+			rc = link(db, argv[2], argv[3]);
 			if (rc != SQLITE_OK)
 				goto end;
 		} else {

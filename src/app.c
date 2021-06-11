@@ -220,7 +220,7 @@ inbox(sqlite3 *db, int head)
 
 	char *err_msg = 0;
 	int rc;
-	rc = sqlite3_exec(db, sql, inbox_callback, 0, &err_msg);
+	rc = sqlite3_exec(db, sql, note_summary_callback, 0, &err_msg);
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Failed to query inbox\n");
@@ -232,7 +232,7 @@ inbox(sqlite3 *db, int head)
 }
 
 int
-inbox_callback(void *not_used, int argc, char **argv, char **col_names)
+note_summary_callback(void *not_used, int argc, char **argv, char **col_names)
 {
 	char *uuid = argv[0];
 	char *date = argv[1];
@@ -245,7 +245,8 @@ inbox_callback(void *not_used, int argc, char **argv, char **col_names)
 	for (size_t i = 0; i < 16; i++)
 		if (body[i] == '\n')
 			body[i] = ' ';
-	
+
+	// Total width will be 80 chars
 	printf("%s - %s - %s...\n", uuid, date, body);
 	return 0;
 }
@@ -474,5 +475,202 @@ spit(sqlite3 *db, const char *uuid, const char *path)
 
 	sqlite3_finalize(stmt);
 
+	return SQLITE_OK;
+}
+
+int
+search(sqlite3 *db, const char *search_type, const char *search_word)
+{
+	char match_phrase[50];
+	sprintf(match_phrase, "%%%s%%", search_word); 
+	
+	char *sql = "SELECT uuid, date, body "
+		"FROM notes "
+		"WHERE body LIKE ?;";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, match_phrase, strlen(match_phrase), SQLITE_STATIC);
+
+	while(1) {
+	
+		rc = sqlite3_step(stmt);
+
+		if (rc == SQLITE_DONE)
+			break;
+
+		if (rc != SQLITE_ROW) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		char *uuid = (char *)sqlite3_column_text(stmt, 0);
+		char *date = (char *)sqlite3_column_text(stmt, 1);
+		char *body = (char *)sqlite3_column_text(stmt, 2);
+
+		if (strlen(body) > 16)
+			body[16] = '\0';
+
+                // Replace newlines with spaces
+		for (size_t i = 0; i < 16; i++)
+			if (body[i] == '\n')
+				body[i] = ' ';
+
+                // Total width will be 80 chars
+		printf("%s - %s - %s...\n", uuid, date, body);	
+	
+	}
+
+	sqlite3_finalize(stmt);
+	return SQLITE_OK;	
+}
+
+int
+link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
+{
+	char *sql = "INSERT INTO links(a_id, b_id) "
+		"VALUES("
+		"(SELECT id FROM notes WHERE uuid = ?), "
+		"(SELECT id FROM notes WHERE uuid = ?)"
+		");";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));		
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_finalize(stmt);
+	
+	return rc;
+}
+
+// TODO: Refactor queries for function
+int
+links(sqlite3 *db, const char *uuid)
+{
+	printf("Link ->:\n");
+	
+	char *sql =
+		"SELECT uuid, date, body "
+		"FROM notes "
+		"WHERE id = "
+		"(SELECT links.b_id "
+		"FROM links "
+		"INNER JOIN notes "
+		"ON links.a_id = notes.id "
+		"WHERE notes.uuid = ?);";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+
+	while(1) {
+	
+		rc = sqlite3_step(stmt);
+
+		if (rc == SQLITE_DONE)
+			break;
+
+		if (rc != SQLITE_ROW) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		char *uuid = (char *)sqlite3_column_text(stmt, 0);
+		char *date = (char *)sqlite3_column_text(stmt, 1);
+		char *body = (char *)sqlite3_column_text(stmt, 2);
+
+		if (strlen(body) > 16)
+			body[16] = '\0';
+
+                // Replace newlines with spaces
+		for (size_t i = 0; i < 16; i++)
+			if (body[i] == '\n')
+				body[i] = ' ';
+
+                // Total width will be 80 chars
+		printf("%s - %s - %s...\n", uuid, date, body);
+	
+	}
+
+	sqlite3_finalize(stmt);
+
+	printf("Link <-:\n");
+
+	char *sql2 =
+		"SELECT uuid, date, body "
+		"FROM notes "
+		"WHERE id = "
+		"(SELECT links.a_id "
+		"FROM links "
+		"INNER JOIN notes "
+		"ON links.b_id = notes.id "
+		"WHERE notes.uuid = ?);";
+
+	sqlite3_stmt *stmt2;
+	rc = sqlite3_prepare_v2(db, sql2, -1, &stmt2, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
+
+	while(1) {
+	
+		rc = sqlite3_step(stmt2);
+
+		if (rc == SQLITE_DONE)
+			break;
+
+		if (rc != SQLITE_ROW) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		char *uuid = (char *)sqlite3_column_text(stmt2, 0);
+		char *date = (char *)sqlite3_column_text(stmt2, 1);
+		char *body = (char *)sqlite3_column_text(stmt2, 2);
+
+		if (strlen(body) > 16)
+			body[16] = '\0';
+
+                // Replace newlines with spaces
+		for (size_t i = 0; i < 16; i++)
+			if (body[i] == '\n')
+				body[i] = ' ';
+
+                // Total width will be 80 chars
+		printf("%s - %s - %s...\n", uuid, date, body);
+	
+	}
+
+	sqlite3_finalize(stmt2);	
 	return SQLITE_OK;
 }
