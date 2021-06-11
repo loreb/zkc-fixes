@@ -81,8 +81,8 @@ create_tables(sqlite3 *db)
 		"id INTEGER PRIMARY KEY, "
 		"note_id INTEGER NOT NULL, "
 		"tag_id INTEGER NOT NULL, "
-		"FOREIGN KEY(note_id) REFERENCES notes(id), "
-		"FOREIGN KEY(tag_id) REFERENCES tags(id)"		
+		"FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE, "
+		"FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE"		
 		")";
 
 	rc = sql_exec(db, create_note_tags);
@@ -92,7 +92,7 @@ create_tables(sqlite3 *db)
 	const char *create_inbox = "CREATE TABLE IF NOT EXISTS inbox("
 		"id INTEGER PRIMARY KEY, "
 		"note_id INTEGER NOT NULL, "
-		"FOREIGN KEY(note_id) REFERENCES notes(id)"
+		"FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE"
 		");";
 
 	rc = sql_exec(db, create_inbox);
@@ -103,8 +103,8 @@ create_tables(sqlite3 *db)
 		"id INTEGER PRIMARY KEY, "
 		"a_id INTEGER NOT NULL, "
 		"b_id INTEGER NOT NULL, "
-		"FOREIGN KEY(a_id) REFERENCES notes(id), "
-		"FOREIGN KEY(b_id) REFERENCES notes(id)"
+		"FOREIGN KEY(a_id) REFERENCES notes(id) ON DELETE CASCADE, "
+		"FOREIGN KEY(b_id) REFERENCES notes(id) ON DELETE CASCADE"
 		");";
 
 	rc = sql_exec(db, create_links);
