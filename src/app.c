@@ -8,7 +8,7 @@
 void
 help(void)
 {
-	printf("zkc usage:\n"
+	printf("zkc usage:"
 	       "default   - help.\n"
 	       "help      - display commands and usage.\n"
 	       "init      - create tables.\n"
@@ -25,6 +25,7 @@ help(void)
 	       "links     - [uuid] - display forward and backward links for note.\n"
 	       "tag       - [uuid] [tag] - tag note\n"
 	       "tags      - [uuid] - list tags for note. list all tags by default.\n"
+	       "delete    - [delete_type|uuid] [uuid|tag_name] [uuid] - delete note , tag, or link.\n"
 	      );
 }
 
@@ -82,7 +83,7 @@ create_tables(sqlite3 *db)
 		"note_id INTEGER NOT NULL, "
 		"tag_id INTEGER NOT NULL, "
 		"FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE, "
-		"FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE"		
+		"FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE"
 		")";
 
 	rc = sql_exec(db, create_note_tags);
@@ -141,7 +142,7 @@ new(sqlite3 *db)
 	long length = ftell(f);
 	fseek(f, 0, SEEK_SET);
 	char *buffer = (char*)malloc(sizeof(char)*length);
-	
+
 	if (buffer)
 		fread(buffer, sizeof(char), length, f);
 
@@ -196,7 +197,7 @@ new(sqlite3 *db)
 	}
 
 	sqlite3_finalize(stmt);
-	
+
 end:
 	if (buffer != NULL)
 		free(buffer);
@@ -277,7 +278,7 @@ view(sqlite3 *db, const char *uuid)
 		fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
 		return rc;
 	}
-	
+
 	printf("%s\n", (char *)sqlite3_column_text(stmt, 0));
 
 	sqlite3_finalize(stmt);
@@ -312,7 +313,7 @@ edit(sqlite3 *db, const char *uuid)
 		fclose(fw);
 	}
 
-	sqlite3_finalize(stmt);	
+	sqlite3_finalize(stmt);
 
 	char command[100];
 	sprintf(command, "$EDITOR %s", uuid);
@@ -328,7 +329,7 @@ edit(sqlite3 *db, const char *uuid)
 	long length = ftell(fr);
 	fseek(fr, 0, SEEK_SET);
 	char *buffer = (char*)malloc(sizeof(char) * length);
-	
+
 	if (buffer)
 		fread(buffer, sizeof(char), length, fr);
 
@@ -347,7 +348,7 @@ edit(sqlite3 *db, const char *uuid)
 			goto end;
 		}
 
-		sqlite3_bind_text(stmt, 1, buffer, strlen(buffer), SQLITE_TRANSIENT);		
+		sqlite3_bind_text(stmt, 1, buffer, strlen(buffer), SQLITE_TRANSIENT);
 		sqlite3_bind_text(stmt, 2, uuid, strlen(uuid), SQLITE_STATIC);
 
 		rc = sqlite3_step(stmt);
@@ -362,8 +363,8 @@ edit(sqlite3 *db, const char *uuid)
 
 end:
 	if (buffer != NULL)
-		free(buffer);	
-	
+		free(buffer);
+
 	return rc;
 }
 
@@ -381,7 +382,7 @@ slurp(sqlite3 *db, const char *path)
 	long length = ftell(f);
 	fseek(f, 0, SEEK_SET);
 	char *buffer = (char*)malloc(sizeof(char)*length);
-	
+
 	if (buffer)
 		fread(buffer, sizeof(char), length, f);
 
@@ -403,7 +404,7 @@ slurp(sqlite3 *db, const char *path)
 		uuid_t binuuid;
 		uuid_generate_random(binuuid);
 		uuid_unparse_lower(binuuid, uuid);
-		
+
 
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 		sqlite3_bind_text(stmt, 2, buffer, strlen(buffer), SQLITE_TRANSIENT);
@@ -442,12 +443,12 @@ slurp(sqlite3 *db, const char *path)
 	}
 
 	sqlite3_finalize(stmt);
-	
+
 end:
 	if (buffer != NULL)
 		free(buffer);
 
-	return rc;	
+	return rc;
 }
 
 int
@@ -487,8 +488,8 @@ int
 search(sqlite3 *db, const char *search_type, const char *search_word)
 {
 	char match_phrase[50];
-	sprintf(match_phrase, "%%%s%%", search_word); 
-	
+	sprintf(match_phrase, "%%%s%%", search_word);
+
 	char *sql = "SELECT uuid, date, body "
 		"FROM notes "
 		"WHERE body LIKE ?;";
@@ -504,98 +505,7 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
 	sqlite3_bind_text(stmt, 1, match_phrase, strlen(match_phrase), SQLITE_STATIC);
 
 	while(1) {
-	
-		rc = sqlite3_step(stmt);
 
-		if (rc == SQLITE_DONE)
-			break;
-
-		if (rc != SQLITE_ROW) {
-			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
-			return rc;
-		}
-
-		char *uuid = (char *)sqlite3_column_text(stmt, 0);
-		char *date = (char *)sqlite3_column_text(stmt, 1);
-		char *body = (char *)sqlite3_column_text(stmt, 2);
-
-		if (strlen(body) > 16)
-			body[16] = '\0';
-
-                // Replace newlines with spaces
-		for (size_t i = 0; i < 16; i++)
-			if (body[i] == '\n')
-				body[i] = ' ';
-
-                // Total width will be 80 chars
-		printf("%s - %s - %s...\n", uuid, date, body);	
-	
-	}
-
-	sqlite3_finalize(stmt);
-	return SQLITE_OK;	
-}
-
-int
-link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
-{
-	char *sql = "INSERT INTO links(a_id, b_id) "
-		"VALUES("
-		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1), "
-		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1)"
-		");";
-
-	sqlite3_stmt *stmt;
-	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
-
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));		
-		return rc;
-	}
-
-	sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
-	sqlite3_bind_text(stmt, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
-
-	rc = sqlite3_step(stmt);
-
-	if (rc != SQLITE_DONE) {
-		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
-		return rc;
-	}
-
-	sqlite3_finalize(stmt);
-	
-	return rc;
-}
-
-// TODO: Refactor queries into function that accepts sql query as input
-int
-links(sqlite3 *db, const char *uuid)
-{
-	printf("Link ->:\n");
-	
-	char *sql =
-		"SELECT uuid, date, body "
-		"FROM notes "
-		"WHERE id = "
-		"(SELECT links.b_id "
-		"FROM links "
-		"INNER JOIN notes "
-		"ON links.a_id = notes.id "
-		"WHERE notes.uuid = ?);";
-
-	sqlite3_stmt *stmt;
-	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
-
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
-		return rc;
-	}
-
-	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
-
-	while(1) {
-	
 		rc = sqlite3_step(stmt);
 
 		if (rc == SQLITE_DONE)
@@ -620,7 +530,98 @@ links(sqlite3 *db, const char *uuid)
 
                 // Total width will be 80 chars
 		printf("%s - %s - %s...\n", uuid, date, body);
-	
+
+	}
+
+	sqlite3_finalize(stmt);
+	return SQLITE_OK;
+}
+
+int
+link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
+{
+	char *sql = "INSERT INTO links(a_id, b_id) "
+		"VALUES("
+		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1), "
+		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1)"
+		");";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return rc;
+}
+
+// TODO: Refactor queries into function that accepts sql query as input
+int
+links(sqlite3 *db, const char *uuid)
+{
+	printf("Link ->:\n");
+
+	char *sql =
+		"SELECT uuid, date, body "
+		"FROM notes "
+		"WHERE id = "
+		"(SELECT links.b_id "
+		"FROM links "
+		"INNER JOIN notes "
+		"ON links.a_id = notes.id "
+		"WHERE notes.uuid = ?);";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+
+	while(1) {
+
+		rc = sqlite3_step(stmt);
+
+		if (rc == SQLITE_DONE)
+			break;
+
+		if (rc != SQLITE_ROW) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		char *uuid = (char *)sqlite3_column_text(stmt, 0);
+		char *date = (char *)sqlite3_column_text(stmt, 1);
+		char *body = (char *)sqlite3_column_text(stmt, 2);
+
+		if (strlen(body) > 16)
+			body[16] = '\0';
+
+                // Replace newlines with spaces
+		for (size_t i = 0; i < 16; i++)
+			if (body[i] == '\n')
+				body[i] = ' ';
+
+                // Total width will be 80 chars
+		printf("%s - %s - %s...\n", uuid, date, body);
+
 	}
 
 	sqlite3_finalize(stmt);
@@ -648,7 +649,7 @@ links(sqlite3 *db, const char *uuid)
 	sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
 
 	while(1) {
-	
+
 		rc = sqlite3_step(stmt2);
 
 		if (rc == SQLITE_DONE)
@@ -673,10 +674,10 @@ links(sqlite3 *db, const char *uuid)
 
                 // Total width will be 80 chars
 		printf("%s - %s - %s...\n", uuid, date, body);
-	
+
 	}
 
-	sqlite3_finalize(stmt2);	
+	sqlite3_finalize(stmt2);
 	return SQLITE_OK;
 }
 
@@ -684,7 +685,7 @@ int
 tag(sqlite3 *db, const char *uuid, const char *tag_body)
 {
 	char *sql = "INSERT OR IGNORE INTO tags(body) VALUES(?);";
-	
+
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
@@ -694,7 +695,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 	}
 
 	sqlite3_bind_text(stmt, 1, tag_body, strlen(tag_body), SQLITE_STATIC);
-	sqlite3_bind_text(stmt, 2, tag_body, strlen(tag_body), SQLITE_STATIC);	
+	sqlite3_bind_text(stmt, 2, tag_body, strlen(tag_body), SQLITE_STATIC);
 
 	rc = sqlite3_step(stmt);
 
@@ -729,7 +730,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 
 		tag_id = sqlite3_column_int(stmt2, 0);
 
-		sqlite3_finalize(stmt2);		
+		sqlite3_finalize(stmt2);
 	}
 
 	char *sql3 = "INSERT INTO note_tags(note_id, tag_id) "
@@ -743,7 +744,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
-		return rc;		
+		return rc;
 	}
 
 	sqlite3_bind_text(stmt3, 1, uuid, strlen(uuid), SQLITE_STATIC);
@@ -753,9 +754,9 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 
 	if (rc != SQLITE_DONE) {
 		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
-		return rc;		
+		return rc;
 	}
-		
+
 	sqlite3_finalize(stmt3);
 
 	return rc;
@@ -764,7 +765,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 int
 tags(sqlite3 *db, const char *uuid)
 {
-	char *sql;	
+	char *sql;
 	sqlite3_stmt *stmt;
 	int rc;
 
@@ -784,8 +785,8 @@ tags(sqlite3 *db, const char *uuid)
 			return rc;
 		}
 
-		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);	
-		
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+
 	} else {
 		sql = "SELECT tags.body FROM tags;";
 
@@ -795,11 +796,11 @@ tags(sqlite3 *db, const char *uuid)
 			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
 			return rc;
 		}
-		
+
 	}
 
 	while(1) {
-	
+
 		rc = sqlite3_step(stmt);
 
 		if (rc == SQLITE_DONE)
@@ -811,7 +812,88 @@ tags(sqlite3 *db, const char *uuid)
 		}
 
 		printf("%s\n", (char *)sqlite3_column_text(stmt, 0));
-	
+
+	}
+
+	sqlite3_finalize(stmt);
+
+	return rc;
+}
+
+int
+delete_note(sqlite3 *db, const char *uuid)
+{
+	char *sql = "DELETE FROM notes WHERE uuid = ?";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;		
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);	
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return rc;
+}
+
+int
+delete_tag(sqlite3 *db, const char *tag_body)
+{
+	char *sql = "DELETE FROM tags WHERE body = ?";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;		
+	}
+
+	sqlite3_bind_text(stmt, 1, tag_body, strlen(tag_body), SQLITE_STATIC);	
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return rc;	
+}
+
+int
+delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
+{
+	char *sql = "DELETE FROM links "
+		"WHERE a_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1) "
+		"AND b_id = (SELECT id FROM WHERE uuid = ? LIMIT 1)";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;		
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 1, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
 	}
 
 	sqlite3_finalize(stmt);

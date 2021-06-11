@@ -65,6 +65,10 @@ main(int argc, char **argv)
 		} else if (!strcmp(argv[1], "tags")) {
 			rc = tags(db, argv[2]);
 			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "delete")) {
+			rc = delete_note(db, argv[2]);
+			if (rc != SQLITE_OK)
 				goto end;			
 		} else {
 			printf("Invalid command: %s\n", argv[1]);
@@ -86,8 +90,32 @@ main(int argc, char **argv)
 			rc = tag(db, argv[2], argv[3]);
 			if (rc != SQLITE_OK)
 				goto end;
+		} else if (!strcmp(argv[1], "delete")) {
+			if (!strcmp(argv[2], "note")) {
+				rc = delete_note(db, argv[2]);
+				if (rc != SQLITE_OK)
+					goto end;				
+			} else if (!strcmp(argv[2], "tag")) {
+				rc = delete_tag(db, argv[2]);
+				if (rc != SQLITE_OK)
+					goto end;				
+			} else {
+				printf("Invalid delete type: %s\n", argv[2]);
+			}
 		} else {
 			printf("Invalid command: %s\n", argv[1]);
+		}
+	} else if (argc == 5) {
+		if (!strcmp(argv[1], "delete")) {
+			if (!strcmp(argv[2], "link")) {
+				rc = delete_link(db, argv[3], argv[4]);
+				if (rc != SQLITE_OK)
+					goto end;
+			} else {
+				printf("Invalid delete type: %s\n", argv[2]);
+			}
+		} else {
+			printf("Invalid command: %s\n", argv[1]);			
 		}
 	} else {
 		help();

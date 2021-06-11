@@ -51,4 +51,13 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body);
 int
 tags(sqlite3 *db, const char *uuid);
 
+int
+delete_note(sqlite3 *db, const char *uuid);
+
+int
+delete_tag(sqlite3 *db, const char *tag_body);
+
+int
+delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b);
+
 #endif
