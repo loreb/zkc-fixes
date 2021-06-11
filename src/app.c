@@ -261,7 +261,17 @@ note_summary_callback(void *not_used, int argc, char **argv, char **col_names)
 int
 view(sqlite3 *db, const char *uuid)
 {
-	char *sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1;";
+	char *sql;
+
+	if (!strcmp(uuid, "head")) {
+		sql = "SELECT body FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1;";
+	} else {
+		sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1;";
+	}
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -271,7 +281,9 @@ view(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	if (strcmp(uuid, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	}
 
 	rc = sqlite3_step(stmt);
 
@@ -289,7 +301,16 @@ view(sqlite3 *db, const char *uuid)
 int
 edit(sqlite3 *db, const char *uuid)
 {
-	char *sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1";
+	char *sql;
+	if (!strcmp(uuid, "head")) {
+		sql = "SELECT body FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1";
+	} else {
+		sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1;";
+	}
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -299,7 +320,9 @@ edit(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	if (!strcmp(uuid, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	}
 
 	rc = sqlite3_step(stmt);
 
@@ -340,7 +363,18 @@ edit(sqlite3 *db, const char *uuid)
 	rc = SQLITE_OK;
 
 	if (buffer) {
-		char *sql = "UPDATE notes SET body = ? WHERE uuid = ?;";
+		char *sql;
+		if (!strcmp(uuid, "head")) {
+			sql = "UPDATE notes SET BODY = ? WHERE id = "
+				"(SELECT notes.id FROM notes "
+				"INNER JOIN inbox "
+				"ON notes.id = inbox.note_id "
+				"ORDER BY notes.date DESC "
+				"LIMIT 1"
+				")";
+		} else {
+			sql = "UPDATE notes SET body = ? WHERE uuid = ?;";
+		}
 		sqlite3_stmt *stmt;
 		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
@@ -350,7 +384,10 @@ edit(sqlite3 *db, const char *uuid)
 		}
 
 		sqlite3_bind_text(stmt, 1, buffer, strlen(buffer), SQLITE_TRANSIENT);
-		sqlite3_bind_text(stmt, 2, uuid, strlen(uuid), SQLITE_STATIC);
+
+		if (strcmp(uuid, "head")) {
+			sqlite3_bind_text(stmt, 2, uuid, strlen(uuid), SQLITE_STATIC);
+		}
 
 		rc = sqlite3_step(stmt);
 
@@ -455,7 +492,16 @@ end:
 int
 spit(sqlite3 *db, const char *uuid, const char *path)
 {
-	char *sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1";
+	char *sql;
+	if (!strcmp(uuid, "head")) {
+		sql = "SELECT body FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1;";
+	} else {
+		sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1";
+	}
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -465,7 +511,9 @@ spit(sqlite3 *db, const char *uuid, const char *path)
 		return rc;
 	}
 
-	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	if (strcmp(uuid, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	}
 
 	rc = sqlite3_step(stmt);
 
@@ -542,11 +590,37 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
 int
 link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
-	char *sql = "INSERT INTO links(a_id, b_id) "
-		"VALUES("
-		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1), "
-		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1)"
-		");";
+	if (!strcmp(uuid_a, uuid_b)) {
+		fprintf(stderr, "Not supposed to link a note to itself!");
+		return SQLITE_OK;
+	}
+
+	char *sql;
+	if (!strcmp(uuid_a, "head")) {
+		sql = "INSERT INTO links(a_id, b_id) "
+			"VALUES("
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1), "
+			"(SELECT id FROM notes WHERE uuid = ?)"
+			");";
+	} else if (!strcmp(uuid_b, "head")) {
+		sql = "INSERT INTO links(a_id, b_id) "
+			"VALUES("
+			"(SELECT id FROM notes WHERE uuid = ?), "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1)"
+			");";
+	} else {
+		sql = "INSERT INTO links(a_id, b_id) "
+			"VALUES("
+			"(SELECT id FROM notes WHERE uuid = ? LIMIT 1), "
+			"(SELECT id FROM notes WHERE uuid = ? LIMIT 1)"
+			");";
+	}
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -556,8 +630,14 @@ link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 		return rc;
 	}
 
-	sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
-	sqlite3_bind_text(stmt, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	if (!strcmp(uuid_a, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	} else if (!strcmp(uuid_b, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+	} else {
+		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+		sqlite3_bind_text(stmt, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	}
 
 	rc = sqlite3_step(stmt);
 
@@ -577,15 +657,31 @@ links(sqlite3 *db, const char *uuid)
 {
 	printf("Link ->:\n");
 
-	char *sql =
-		"SELECT uuid, date, body "
-		"FROM notes "
-		"WHERE id = "
-		"(SELECT links.b_id "
-		"FROM links "
-		"INNER JOIN notes "
-		"ON links.a_id = notes.id "
-		"WHERE notes.uuid = ?);";
+	char *sql;
+	if (!strcmp(uuid, "head")) {
+		sql = "SELECT uuid, date, body "
+			"FROM notes "
+			"WHERE id = "
+			"(SELECT links.b_id "
+			"FROM links "
+			"INNER JOIN notes "
+			"ON links.a_id = notes.id "
+			"WHERE notes.id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1));";
+	} else {
+		sql = "SELECT uuid, date, body "
+			"FROM notes "
+			"WHERE id = "
+			"(SELECT links.b_id "
+			"FROM links "
+			"INNER JOIN notes "
+			"ON links.a_id = notes.id "
+			"WHERE notes.uuid = ?);";
+	}
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -595,7 +691,9 @@ links(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	if (strcmp(uuid, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	}
 
 	while(1) {
 
@@ -630,15 +728,32 @@ links(sqlite3 *db, const char *uuid)
 
 	printf("Link <-:\n");
 
-	char *sql2 =
-		"SELECT uuid, date, body "
-		"FROM notes "
-		"WHERE id = "
-		"(SELECT links.a_id "
-		"FROM links "
-		"INNER JOIN notes "
-		"ON links.b_id = notes.id "
-		"WHERE notes.uuid = ?);";
+	char *sql2;
+
+	if (!strcmp(uuid, "head")) {
+		sql2 = "SELECT uuid, date, body "
+			"FROM notes "
+			"WHERE id = "
+			"(SELECT links.a_id "
+			"FROM links "
+			"INNER JOIN notes "
+			"ON links.b_id = notes.id "
+			"WHERE notes.id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1));";
+	} else {
+		sql2 = "SELECT uuid, date, body "
+			"FROM notes "
+			"WHERE id = "
+			"(SELECT links.a_id "
+			"FROM links "
+			"INNER JOIN notes "
+			"ON links.b_id = notes.id "
+			"WHERE notes.uuid = ?);";
+	}
 
 	sqlite3_stmt *stmt2;
 	rc = sqlite3_prepare_v2(db, sql2, -1, &stmt2, 0);
@@ -648,7 +763,9 @@ links(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	if (strcmp(uuid, "head")) {
+		sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	}
 
 	while(1) {
 
@@ -697,12 +814,11 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 	}
 
 	sqlite3_bind_text(stmt, 1, tag_body, strlen(tag_body), SQLITE_STATIC);
-	sqlite3_bind_text(stmt, 2, tag_body, strlen(tag_body), SQLITE_STATIC);
 
 	rc = sqlite3_step(stmt);
 
 	if (rc != SQLITE_DONE) {
-		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		fprintf(stderr, "INSERT TAG - execution failed: %s\n", sqlite3_errmsg(db));
 		return rc;
 	}
 
@@ -725,8 +841,8 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 
 		rc = sqlite3_step(stmt2);
 
-		if (rc != SQLITE_DONE) {
-			fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		if (rc != SQLITE_ROW) {
+			fprintf(stderr, "SELECT tag - execution failed: %s\n", sqlite3_errmsg(db));
 			return rc;
 		}
 
@@ -735,11 +851,22 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 		sqlite3_finalize(stmt2);
 	}
 
-	char *sql3 = "INSERT INTO note_tags(note_id, tag_id) "
+	char *sql3;
+	if (!strcmp(uuid, "head")) {
+		sql3 = "INSERT INTO note_tags(note_id, tag_id) "
+		"VALUES("
+		"(SELECT notes.id FROM notes "
+		"INNER JOIN inbox ON notes.id = inbox.note_id "
+		"ORDER BY notes.date DESC LIMIT 1), "
+		"?"
+		");";
+	} else {
+		sql3 = "INSERT INTO note_tags(note_id, tag_id) "
 		"VALUES("
 		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1), "
 		"?"
 		");";
+	}
 
 	sqlite3_stmt *stmt3;
 	rc = sqlite3_prepare_v2(db, sql3, -1, &stmt3, 0);
@@ -749,13 +876,17 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 		return rc;
 	}
 
-	sqlite3_bind_text(stmt3, 1, uuid, strlen(uuid), SQLITE_STATIC);
-	sqlite3_bind_int(stmt3, 2, tag_id);
+	if (!strcmp(uuid, "head")) {
+		sqlite3_bind_int(stmt3, 1, tag_id);
+	} else {
+		sqlite3_bind_text(stmt3, 1, uuid, strlen(uuid), SQLITE_STATIC);
+		sqlite3_bind_int(stmt3, 2, tag_id);
+	}
 
 	rc = sqlite3_step(stmt3);
 
 	if (rc != SQLITE_DONE) {
-		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		fprintf(stderr, "INSERT NOTE TAG - execution failed: %s\n", sqlite3_errmsg(db));
 		return rc;
 	}
 
@@ -772,23 +903,45 @@ tags(sqlite3 *db, const char *uuid)
 	int rc;
 
 	if (uuid) {
-		sql = "SELECT tags.body "
-			"FROM tags "
-			"INNER JOIN note_tags "
-			"ON tags.id = note_tags.tag_id "
-			"INNER JOIN notes "
-			"ON notes.id = note_tags.note_id "
-			"WHERE notes.uuid = ?;";
+		if (!strcmp(uuid, "head")) {
+			sql = "SELECT tags.body "
+				"FROM tags "
+				"INNER JOIN note_tags "
+				"ON tags.id = note_tags.tag_id "
+				"INNER JOIN notes "
+				"ON notes.id = note_tags.note_id "
+				"WHERE notes.id = "
+				"(SELECT notes.id FROM notes "
+				"INNER JOIN inbox "
+				"ON notes.id = inbox.note_id "
+				"ORDER BY notes.date "
+				"LIMIT 1);";
 
-		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+			rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
-		if (rc != SQLITE_OK) {
-			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
-			return rc;
+			if (rc != SQLITE_OK) {
+				fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+				return rc;
+			}
+
+		} else {
+			sql = "SELECT tags.body "
+				"FROM tags "
+				"INNER JOIN note_tags "
+				"ON tags.id = note_tags.tag_id "
+				"INNER JOIN notes "
+				"ON notes.id = note_tags.note_id "
+				"WHERE notes.uuid = ?;";
+
+			rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+			if (rc != SQLITE_OK) {
+				fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+				return rc;
+			}
+
+			sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 		}
-
-		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
-
 	} else {
 		sql = "SELECT tags.body FROM tags;";
 
@@ -825,16 +978,28 @@ tags(sqlite3 *db, const char *uuid)
 int
 delete_note(sqlite3 *db, const char *uuid)
 {
-	char *sql = "DELETE FROM notes WHERE uuid = ?;";
+	char *sql;
+	if (!strcmp(uuid, "head")) {
+		sql = "DELETE FROM notes WHERE id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date "
+			"LIMIT 1);";
+	} else {
+		sql = "DELETE FROM notes WHERE uuid = ?;";
+	}
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
-		return rc;		
+		return rc;
 	}
 
-	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);	
+	if (strcmp(uuid, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	}
 
 	rc = sqlite3_step(stmt);
 
@@ -857,10 +1022,10 @@ delete_tag(sqlite3 *db, const char *tag_body)
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
-		return rc;		
+		return rc;
 	}
 
-	sqlite3_bind_text(stmt, 1, tag_body, strlen(tag_body), SQLITE_STATIC);	
+	sqlite3_bind_text(stmt, 1, tag_body, strlen(tag_body), SQLITE_STATIC);
 
 	rc = sqlite3_step(stmt);
 
@@ -871,25 +1036,42 @@ delete_tag(sqlite3 *db, const char *tag_body)
 
 	sqlite3_finalize(stmt);
 
-	return rc;	
+	return rc;
 }
 
 int
 delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
-	char *sql = "DELETE FROM links "
-		"WHERE a_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1) "
-		"AND b_id = (SELECT id FROM WHERE uuid = ? LIMIT 1);";
+	char *sql;
+	if (!strcmp(uuid_a, "head")) {
+		sql = "DELETE FROM links "
+			"WHERE a_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date DESC LIMIT 1) "
+			"AND b_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
+	} else if (!strcmp(uuid_b, "head")) {
+		sql = "DELETE FROM links "
+			"WHERE b_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date DESC LIMIT 1) "
+			"AND a_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
+	} else {
+		sql = "DELETE FROM links "
+			"WHERE a_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1) "
+			"AND b_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
+	}
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
-		return rc;		
+		return rc;
 	}
 
-	sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
-	sqlite3_bind_text(stmt, 1, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	if (!strcmp(uuid_a, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	} else if (!strcmp(uuid_b, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+	} else {
+		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+		sqlite3_bind_text(stmt, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	}
 
 	rc = sqlite3_step(stmt);
 
@@ -907,7 +1089,7 @@ int
 archive(sqlite3 *db, const char *uuid)
 {
 	char *sql;
-	sqlite3_stmt *stmt;	
+	sqlite3_stmt *stmt;
 	if (!strcmp(uuid, "head")) {
 		sql = "DELETE FROM inbox WHERE note_id = "
 			"(SELECT note_id FROM inbox "
@@ -922,7 +1104,7 @@ archive(sqlite3 *db, const char *uuid)
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
-		return rc;		
+		return rc;
 	}
 
 	if (strcmp(uuid, "head")) {
@@ -938,5 +1120,5 @@ archive(sqlite3 *db, const char *uuid)
 
 	sqlite3_finalize(stmt);
 
-	return rc;	
+	return rc;
 }
