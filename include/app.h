@@ -45,4 +45,10 @@ link(sqlite3 *db, const char *uuid_a, const char *uuid_b);
 int
 links(sqlite3 *db, const char *uuid);
 
+int
+tag(sqlite3 *db, const char *uuid, const char *tag_body);
+
+int
+tags(sqlite3 *db, const char *uuid);
+
 #endif

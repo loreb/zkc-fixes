@@ -34,6 +34,10 @@ main(int argc, char **argv)
 			rc = new(db);
 			if (rc != SQLITE_OK)
 				goto end;
+		} else if (!strcmp(argv[1], "tags")) {
+			rc = tags(db, NULL);
+			if (rc != SQLITE_OK)
+				goto end;
 		} else {
 			printf("Invalid command or missing arguments: %s\n", argv[1]);
 		}
@@ -57,6 +61,10 @@ main(int argc, char **argv)
 		} else if (!strcmp(argv[1], "links")) {
 			rc = links(db, argv[2]);
 			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "tags")) {
+			rc = tags(db, argv[2]);
+			if (rc != SQLITE_OK)
 				goto end;			
 		} else {
 			printf("Invalid command: %s\n", argv[1]);
@@ -72,6 +80,10 @@ main(int argc, char **argv)
 				goto end;
 		} else if (!strcmp(argv[1], "link")) {
 			rc = link(db, argv[2], argv[3]);
+			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "tag")) {
+			rc = tag(db, argv[2], argv[3]);
 			if (rc != SQLITE_OK)
 				goto end;
 		} else {

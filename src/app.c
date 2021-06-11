@@ -8,18 +8,23 @@
 void
 help(void)
 {
-	printf("Welcome to zkc. Usage:\n"
-	       "zkc [command]\n"
-	       "Commands:\n"
-	       "help (default) - display commands\n"
-	       "init - create tables\n"
-	       "new - create new zettel in inbox\n"
-	       "inbox - list zettels in inbox\n"
-	       "head - show first zettel in inbox\n"
-	       "view - view zettel by uuid\n"
-	       "edit - edit zettel by uuid\n"
-	       "slurp - load file into note\n"
-	       "spit - write note to file"
+	printf("zkc usage:\n"
+	       "default   - help.\n"
+	       "help      - display commands and usage.\n"
+	       "init      - create tables.\n"
+	       "new       - create new zettel in inbox.\n"
+	       "inbox     - list zettels in inbox.\n"
+	       "head      - show first zettel in inbox.\n"
+	       "view      - [uuid] - view zettel by uuid.\n"
+	       "edit      - [uuid] - edit zettel by uuid.\n"
+	       "slurp     - [path] - load file into note.\n"
+	       "spit      - [uuid] [path] - write note to file.\n"
+	       "search    - [search_type] [search_word] - search notes by search type\n"
+	       "            (text|tag) and search word. search_type defaults to text.\n"
+	       "link      - [uuid] [uuid] - link note to other note.\n"
+	       "links     - [uuid] - display forward and backward links for note.\n"
+	       "tag       - [uuid] [tag] - tag note\n"
+	       "tags      - [uuid] - list tags for note. list all tags by default.\n"
 	      );
 }
 
@@ -65,7 +70,7 @@ create_tables(sqlite3 *db)
 
 	const char *create_tags = "CREATE TABLE IF NOT EXISTS tags("
 		"id INTEGER PRIMARY KEY, "
-		"body TEXT NOT NULL"
+		"body TEXT UNIQUE NOT NULL"
 		");";
 
 	rc = sql_exec(db, create_tags);
@@ -536,8 +541,8 @@ link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
 	char *sql = "INSERT INTO links(a_id, b_id) "
 		"VALUES("
-		"(SELECT id FROM notes WHERE uuid = ?), "
-		"(SELECT id FROM notes WHERE uuid = ?)"
+		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1), "
+		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1)"
 		");";
 
 	sqlite3_stmt *stmt;
@@ -563,7 +568,7 @@ link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 	return rc;
 }
 
-// TODO: Refactor queries for function
+// TODO: Refactor queries into function that accepts sql query as input
 int
 links(sqlite3 *db, const char *uuid)
 {
@@ -673,4 +678,143 @@ links(sqlite3 *db, const char *uuid)
 
 	sqlite3_finalize(stmt2);	
 	return SQLITE_OK;
+}
+
+int
+tag(sqlite3 *db, const char *uuid, const char *tag_body)
+{
+	char *sql = "INSERT OR IGNORE INTO tags(body) VALUES(?);";
+	
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, tag_body, strlen(tag_body), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, tag_body, strlen(tag_body), SQLITE_STATIC);	
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_finalize(stmt);
+
+	int tag_id = sqlite3_last_insert_rowid(db);
+
+	// Get tag id if tag already exists
+	if (!tag_id) {
+		char *sql2 = "SELECT id FROM tags WHERE body = ? LIMIT 1;";
+		sqlite3_stmt *stmt2;
+		rc = sqlite3_prepare_v2(db, sql2, -1, &stmt2, 0);
+
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		sqlite3_bind_text(stmt2, 1, tag_body, strlen(tag_body), SQLITE_STATIC);
+
+		rc = sqlite3_step(stmt2);
+
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		tag_id = sqlite3_column_int(stmt2, 0);
+
+		sqlite3_finalize(stmt2);		
+	}
+
+	char *sql3 = "INSERT INTO note_tags(note_id, tag_id) "
+		"VALUES("
+		"(SELECT id FROM notes WHERE uuid = ? LIMIT 1), "
+		"?"
+		");";
+
+	sqlite3_stmt *stmt3;
+	rc = sqlite3_prepare_v2(db, sql3, -1, &stmt3, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;		
+	}
+
+	sqlite3_bind_text(stmt3, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	sqlite3_bind_int(stmt3, 2, tag_id);
+
+	rc = sqlite3_step(stmt3);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;		
+	}
+		
+	sqlite3_finalize(stmt3);
+
+	return rc;
+}
+
+int
+tags(sqlite3 *db, const char *uuid)
+{
+	char *sql;	
+	sqlite3_stmt *stmt;
+	int rc;
+
+	if (uuid) {
+		sql = "SELECT tags.body "
+			"FROM tags "
+			"INNER JOIN note_tags "
+			"ON tags.id = note_tags.tag_id "
+			"INNER JOIN notes "
+			"ON notes.id = note_tags.note_id "
+			"WHERE notes.uuid = ?;";
+
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);	
+		
+	} else {
+		sql = "SELECT tags.body FROM tags;";
+
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+		
+	}
+
+	while(1) {
+	
+		rc = sqlite3_step(stmt);
+
+		if (rc == SQLITE_DONE)
+			break;
+
+		if (rc != SQLITE_ROW) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		printf("%s\n", (char *)sqlite3_column_text(stmt, 0));
+	
+	}
+
+	sqlite3_finalize(stmt);
+
+	return rc;
 }
