@@ -533,16 +533,30 @@ spit(sqlite3 *db, const char *uuid, const char *path)
 	return SQLITE_OK;
 }
 
-// TODO: Implement search by tag
 int
 search(sqlite3 *db, const char *search_type, const char *search_word)
 {
+	char *sql;
 	char match_phrase[50];
 	sprintf(match_phrase, "%%%s%%", search_word);
 
-	char *sql = "SELECT uuid, date, body "
-		"FROM notes "
-		"WHERE body LIKE ?;";
+	if (!strcmp(search_type, "text")) {
+		sql = "SELECT uuid, date, body "
+			"FROM notes "
+			"WHERE body LIKE ?;";
+	} else if (!strcmp(search_type, "tag")) {
+		sql = "SELECT uuid, date, body "
+			"FROM notes "
+			"WHERE notes.id = "
+			"(SELECT note_id "
+			"FROM note_tags "
+			"INNER JOIN tags "
+			"ON note_tags.tag_id = tags.id "
+			"WHERE tags.body LIKE ?);";
+	} else {
+		fprintf(stderr, "Invalid search type: %s\n", search_type);
+		return 1;
+	}
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
