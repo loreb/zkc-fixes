@@ -69,7 +69,11 @@ main(int argc, char **argv)
 		} else if (!strcmp(argv[1], "delete")) {
 			rc = delete_note(db, argv[2]);
 			if (rc != SQLITE_OK)
-				goto end;			
+				goto end;
+		} else if (!strcmp(argv[1], "archive")) {
+			rc = archive(db, argv[2]);
+			if (rc != SQLITE_OK)
+				goto end;
 		} else {
 			printf("Invalid command: %s\n", argv[1]);
 		}
@@ -92,11 +96,11 @@ main(int argc, char **argv)
 				goto end;
 		} else if (!strcmp(argv[1], "delete")) {
 			if (!strcmp(argv[2], "note")) {
-				rc = delete_note(db, argv[2]);
+				rc = delete_note(db, argv[3]);
 				if (rc != SQLITE_OK)
 					goto end;				
 			} else if (!strcmp(argv[2], "tag")) {
-				rc = delete_tag(db, argv[2]);
+				rc = delete_tag(db, argv[3]);
 				if (rc != SQLITE_OK)
 					goto end;				
 			} else {

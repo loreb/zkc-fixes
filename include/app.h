@@ -60,4 +60,7 @@ delete_tag(sqlite3 *db, const char *tag_body);
 int
 delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b);
 
+int
+archive(sqlite3 *db, const char *uuid);
+
 #endif

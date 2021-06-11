@@ -26,6 +26,7 @@ help(void)
 	       "tag       - [uuid] [tag] - tag note\n"
 	       "tags      - [uuid] - list tags for note. list all tags by default.\n"
 	       "delete    - [delete_type|uuid] [uuid|tag_name] [uuid] - delete note , tag, or link.\n"
+	       "archive   - [uuid] - move note out of inbox"
 	      );
 }
 
@@ -484,6 +485,7 @@ spit(sqlite3 *db, const char *uuid, const char *path)
 	return SQLITE_OK;
 }
 
+// TODO: Implement search by tag
 int
 search(sqlite3 *db, const char *search_type, const char *search_word)
 {
@@ -823,7 +825,7 @@ tags(sqlite3 *db, const char *uuid)
 int
 delete_note(sqlite3 *db, const char *uuid)
 {
-	char *sql = "DELETE FROM notes WHERE uuid = ?";
+	char *sql = "DELETE FROM notes WHERE uuid = ?;";
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -849,7 +851,7 @@ delete_note(sqlite3 *db, const char *uuid)
 int
 delete_tag(sqlite3 *db, const char *tag_body)
 {
-	char *sql = "DELETE FROM tags WHERE body = ?";
+	char *sql = "DELETE FROM tags WHERE body = ?;";
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -877,7 +879,7 @@ delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
 	char *sql = "DELETE FROM links "
 		"WHERE a_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1) "
-		"AND b_id = (SELECT id FROM WHERE uuid = ? LIMIT 1)";
+		"AND b_id = (SELECT id FROM WHERE uuid = ? LIMIT 1);";
 
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -899,4 +901,42 @@ delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 	sqlite3_finalize(stmt);
 
 	return rc;
+}
+
+int
+archive(sqlite3 *db, const char *uuid)
+{
+	char *sql;
+	sqlite3_stmt *stmt;	
+	if (!strcmp(uuid, "head")) {
+		sql = "DELETE FROM inbox WHERE note_id = "
+			"(SELECT note_id FROM inbox "
+			"INNER JOIN notes "
+			"ON note_id = notes.id "
+			"ORDER BY notes.date DESC LIMIT 1)";
+	} else {
+		sql = "DELETE FROM inbox WHERE note_id = "
+			"(SELECT id FROM notes WHERE uuid = ?);";
+	}
+
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;		
+	}
+
+	if (strcmp(uuid, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	}
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return rc;	
 }
