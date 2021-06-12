@@ -1,8 +1,6 @@
 #ifndef APP_H
 #define APP_H
 
-#define DB_PATH "zkc.db"
-
 int
 open_db(sqlite3 **db);
 
@@ -40,7 +38,7 @@ int
 search(sqlite3 *db, const char *search_type, const char *search_word);
 
 int
-link(sqlite3 *db, const char *uuid_a, const char *uuid_b);
+link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b);
 
 int
 links(sqlite3 *db, const char *uuid);

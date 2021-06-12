@@ -3,6 +3,10 @@
 #include <uuid/uuid.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "app.h"
 
 void
@@ -33,7 +37,27 @@ help(void)
 int
 open_db(sqlite3 **db)
 {
-	int rc = sqlite3_open(DB_PATH, db);
+	char zdir[200];
+        char* homedir = getenv("HOME");
+        if (homedir == NULL)
+                homedir = getpwuid(getuid())->pw_dir;
+
+        strcpy(zdir, homedir);
+        strcat(zdir, "/.zettelkasten/");
+
+        DIR* dr = opendir(zdir);
+        if (dr == NULL) {
+                int result = mkdir(zdir, 0777);
+                if (result != 0) {
+                        printf("Failed to create zettelkasten directory\n");
+                        return 1;
+                } else {
+                        printf("Initialized zettelkasten directory in $HOME\n");
+                }
+        }
+
+	strcat(zdir, "zkc.db");
+	int rc = sqlite3_open(zdir, db);
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open zkc database: %s\n", sqlite3_errmsg(*db));
@@ -547,7 +571,7 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
 	} else if (!strcmp(search_type, "tag")) {
 		sql = "SELECT uuid, date, body "
 			"FROM notes "
-			"WHERE notes.id = "
+			"WHERE notes.id IN "
 			"(SELECT note_id "
 			"FROM note_tags "
 			"INNER JOIN tags "
@@ -602,7 +626,7 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
 }
 
 int
-link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
+link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
 	if (!strcmp(uuid_a, uuid_b)) {
 		fprintf(stderr, "Not supposed to link a note to itself!");
@@ -928,7 +952,7 @@ tags(sqlite3 *db, const char *uuid)
 				"(SELECT notes.id FROM notes "
 				"INNER JOIN inbox "
 				"ON notes.id = inbox.note_id "
-				"ORDER BY notes.date "
+				"ORDER BY notes.date DESC "
 				"LIMIT 1);";
 
 			rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);

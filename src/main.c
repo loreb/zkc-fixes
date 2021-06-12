@@ -87,7 +87,7 @@ main(int argc, char **argv)
 			if (rc != SQLITE_OK)
 				goto end;
 		} else if (!strcmp(argv[1], "link")) {
-			rc = link(db, argv[2], argv[3]);
+			rc = link_notes(db, argv[2], argv[3]);
 			if (rc != SQLITE_OK)
 				goto end;
 		} else if (!strcmp(argv[1], "tag")) {
