@@ -32,6 +32,7 @@ The recommended workflow is to create a note that is added to the inbox. The mos
 in the inbox can be referenced as "head".
 
 Ex:
+
     zkc view head
 
 The point is to be able to save notes as inspiration strikes. Then you can later go through
