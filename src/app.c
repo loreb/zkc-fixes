@@ -30,7 +30,7 @@ help(void)
 	       "tag       - [uuid] [tag] - tag note\n"
 	       "tags      - [uuid] - list tags for note. list all tags by default.\n"
 	       "delete    - [delete_type|uuid] [uuid|tag_name] [uuid] - delete note , tag, or link.\n"
-	       "archive   - [uuid] - move note out of inbox"
+	       "archive   - [uuid] - move note out of inbox.\n"
 	      );
 }
 
@@ -153,12 +153,21 @@ new(sqlite3 *db)
 		return 1;
 	}
 
-	char command[100];
-	sprintf(command, "$EDITOR %s", uuid);
+	char zdir[200];
+        char* homedir = getenv("HOME");
+        if (homedir == NULL)
+                homedir = getpwuid(getuid())->pw_dir;
+
+        strcpy(zdir, homedir);
+        strcat(zdir, "/.zettelkasten/");
+	strcat(zdir, uuid);
+
+	char command[300];
+	sprintf(command, "$EDITOR %s", zdir);
 
 	system(command);
 
-	FILE *f = fopen(uuid, "rb");
+	FILE *f = fopen(zdir, "rb");
 	if (!f)
 		return 0;
 
@@ -172,7 +181,7 @@ new(sqlite3 *db)
 		fread(buffer, sizeof(char), length, f);
 
 	fclose(f);
-	remove(uuid);
+	remove(zdir);
 
 	int rc = SQLITE_OK;
 
