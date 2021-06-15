@@ -1055,7 +1055,7 @@ delete_note(sqlite3 *db, const char *uuid)
 			"(SELECT notes.id FROM notes "
 			"INNER JOIN inbox "
 			"ON notes.id = inbox.note_id "
-			"ORDER BY notes.date "
+			"ORDER BY notes.date DESC "
 			"LIMIT 1);";
 	} else {
 		sql = "DELETE FROM notes WHERE uuid = ?;";
