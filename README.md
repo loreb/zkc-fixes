@@ -76,6 +76,11 @@ To search for all notes that are tagged with foobar.
 
     zkc search tag foobar
 
+## Editor
+
+When opening an editor zkc follows the same process as git. This means it will try to see if
+EDITOR or VISUAL are set. If not, then it will fall back to vi.
+
 # License
 
 GPLv3

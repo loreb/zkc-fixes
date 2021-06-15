@@ -148,11 +148,6 @@ new(sqlite3 *db)
 	uuid_generate_random(binuuid);
 	uuid_unparse_lower(binuuid, uuid);
 
-	if (getenv("EDITOR") == NULL) {
-		printf("EDITOR variable is not set.\n");
-		return 1;
-	}
-
 	char zdir[200];
         char* homedir = getenv("HOME");
         if (homedir == NULL)
@@ -163,9 +158,18 @@ new(sqlite3 *db)
 	strcat(zdir, uuid);
 
 	char command[300];
-	sprintf(command, "$EDITOR %s", zdir);
+	if (getenv("EDITOR") != NULL) {
+	        sprintf(command, "$EDITOR %s", zdir);
+	} else if (getenv("VISUAL") != NULL) {
+	        sprintf(command, "$VISUAL %s", zdir);
+	} else {
+	        sprintf(command, "vi %s", zdir);	  
+	}
 
-	system(command);
+	if (system(command) != 0) {
+	        fprintf(stderr, "Unable to open note with editor!\n");
+	        return 1;
+	}
 
 	FILE *f = fopen(zdir, "rb");
 	if (!f)
@@ -364,7 +368,16 @@ edit(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	FILE *fw = fopen(uuid, "wb");
+	char zdir[200];
+        char* homedir = getenv("HOME");
+        if (homedir == NULL)
+                homedir = getpwuid(getuid())->pw_dir;
+
+        strcpy(zdir, homedir);
+        strcat(zdir, "/.zettelkasten/");
+	strcat(zdir, uuid);	
+
+	FILE *fw = fopen(zdir, "wb");
 	if (fw) {
 		fputs((char *)sqlite3_column_text(stmt, 0), fw);
 		fclose(fw);
@@ -372,14 +385,25 @@ edit(sqlite3 *db, const char *uuid)
 
 	sqlite3_finalize(stmt);
 
-	char command[100];
-	sprintf(command, "$EDITOR %s", uuid);
+	char command[300];
+	if (getenv("EDITOR") != NULL) {
+	        sprintf(command, "$EDITOR %s", zdir);
+	} else if (getenv("VISUAL") != NULL) {
+	        sprintf(command, "$VISUAL %s", zdir);
+	} else {
+	        sprintf(command, "vi %s", zdir);	  
+	}
 
-	system(command);
+	if (system(command) != 0) {
+	        fprintf(stderr, "Unable to open note with editor!\n");
+	        return 1;
+	}	
 
-	FILE *fr = fopen(uuid, "rb");
-	if (!fr)
-		return 0;
+	FILE *fr = fopen(zdir, "rb");
+	if (!fr) {
+	        fprintf(stderr, "Unable to open temp file %s after edit!\n", zdir);
+		return 1;
+	}
 
 	// TODO: Add error check
 	fseek(fr, 0, SEEK_END);
@@ -391,7 +415,7 @@ edit(sqlite3 *db, const char *uuid)
 		fread(buffer, sizeof(char), length, fr);
 
 	fclose(fr);
-	remove(uuid);
+	remove(zdir);
 
 	rc = SQLITE_OK;
 
