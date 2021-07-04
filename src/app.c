@@ -357,7 +357,7 @@ edit(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	if (!strcmp(uuid, "head")) {
+	if (strcmp(uuid, "head")) {
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 	}
 
