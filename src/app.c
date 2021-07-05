@@ -29,7 +29,7 @@ help(void)
 	       "links     - [uuid] - display forward and backward links for note.\n"
 	       "tag       - [uuid] [tag] - tag note\n"
 	       "tags      - [uuid] - list tags for note. list all tags by default.\n"
-	       "delete    - [delete_type|uuid] [uuid|tag_name] [uuid] - delete note , tag, or link.\n"
+	       "delete    - [delete_type|uuid] [uuid|tag_name] [uuid|tag_name] - delete note , tag, note_tag, or link.\n"
 	       "archive   - [uuid] - move note out of inbox.\n"
 	      );
 }
