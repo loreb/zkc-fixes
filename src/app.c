@@ -1111,6 +1111,60 @@ delete_tag(sqlite3 *db, const char *tag_body)
 }
 
 int
+delete_note_tag(sqlite3 *db, const char *uuid, const char *tag_body)
+{
+	char *sql;
+	if (!strcmp(uuid, "head")) {
+		sql = "DELETE FROM note_tags "
+			"WHERE note_id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1) "
+			"AND tag_id = "
+			"(SELECT tags.id FROM tags "
+			"WHERE tags.body = ? "
+			"LIMIT 1);";
+	} else {
+		sql = "DELETE FROM note_tags "
+			"WHERE note_id = "
+			"(SELECT notes.id FROM notes "
+			"WHERE uuid = ? "
+			"LIMIT 1) "
+			"AND tag_id = "
+			"(SELECT tags.id FROM tags "
+			"WHERE body = ? "
+			"LIMIT 1); ";
+	}
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	if (!strcmp(uuid, "head")) {
+		sqlite3_bind_text(stmt, 1, tag_body, strlen(tag_body), SQLITE_STATIC);
+	} else {
+		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+		sqlite3_bind_text(stmt, 2, tag_body, strlen(tag_body), SQLITE_STATIC);
+	}
+
+	rc = sqlite3_step(stmt);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return rc;
+}
+
+int
 delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
 	char *sql;

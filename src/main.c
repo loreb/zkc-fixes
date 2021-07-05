@@ -102,7 +102,7 @@ main(int argc, char **argv)
 			} else if (!strcmp(argv[2], "tag")) {
 				rc = delete_tag(db, argv[3]);
 				if (rc != SQLITE_OK)
-					goto end;				
+					goto end;
 			} else {
 				printf("Invalid delete type: %s\n", argv[2]);
 			}
@@ -113,6 +113,10 @@ main(int argc, char **argv)
 		if (!strcmp(argv[1], "delete")) {
 			if (!strcmp(argv[2], "link")) {
 				rc = delete_link(db, argv[3], argv[4]);
+				if (rc != SQLITE_OK)
+					goto end;
+			} else if (!strcmp(argv[2], "note_tag")) {
+				rc = delete_note_tag(db, argv[3], argv[4]);
 				if (rc != SQLITE_OK)
 					goto end;
 			} else {
