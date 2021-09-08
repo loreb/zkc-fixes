@@ -12,7 +12,7 @@
 void
 help(void)
 {
-	printf("zkc usage:"
+	printf("zkc usage:\n"
 	       "default   - help.\n"
 	       "help      - display commands and usage.\n"
 	       "init      - create tables.\n"
