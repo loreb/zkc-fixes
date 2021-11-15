@@ -21,7 +21,7 @@ help(void)
 	       "head      - show first zettel in inbox.\n"
 	       "view      - [uuid] - view zettel by uuid.\n"
 	       "edit      - [uuid] - edit zettel by uuid.\n"
-	       "slurp     - [path] - load file into note.\n"
+	       "slurp     - [path] - load file into new note.\n"
 	       "spit      - [uuid] [path] - write note to file.\n"
 	       "search    - [search_type] [search_word] - search notes by search type\n"
 	       "            (text|tag) and search word. search_type defaults to text.\n"
@@ -158,7 +158,9 @@ new(sqlite3 *db)
 	strcat(zdir, uuid);
 
 	char command[300];
-	if (getenv("EDITOR") != NULL) {
+	if (getenv("ZKC_EDITOR") != NULL) {
+		sprintf(command, "$ZKC_EDITOR %s", zdir);
+	} else if (getenv("EDITOR") != NULL) {
 	        sprintf(command, "$EDITOR %s", zdir);
 	} else if (getenv("VISUAL") != NULL) {
 	        sprintf(command, "$VISUAL %s", zdir);
@@ -386,7 +388,9 @@ edit(sqlite3 *db, const char *uuid)
 	sqlite3_finalize(stmt);
 
 	char command[300];
-	if (getenv("EDITOR") != NULL) {
+	if (getenv("ZKC_EDITOR") != NULL) {
+		sprintf(command, "$ZKC_EDITOR %s", zdir);
+	} else if (getenv("EDITOR") != NULL) {
 	        sprintf(command, "$EDITOR %s", zdir);
 	} else if (getenv("VISUAL") != NULL) {
 	        sprintf(command, "$VISUAL %s", zdir);

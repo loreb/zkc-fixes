@@ -81,6 +81,8 @@ To search for all notes that are tagged with foobar.
 When opening an editor zkc follows the same process as git. This means it will try to see if
 EDITOR or VISUAL are set. If not, then it will fall back to vi.
 
+If ZKC_EDITOR is set it will take precedence over all other options.
+
 # License
 
 GPLv3
