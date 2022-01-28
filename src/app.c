@@ -19,6 +19,7 @@ help(void)
 	       "new       - create new zettel in inbox.\n"
 	       "inbox     - list zettels in inbox.\n"
 	       "head      - show first zettel in inbox.\n"
+	       "tail      - show last zettel in inbox.\n"
 	       "view      - [uuid] - view zettel by uuid.\n"
 	       "edit      - [uuid] - edit zettel by uuid.\n"
 	       "slurp     - [path] - load file into new note.\n"
@@ -56,8 +57,8 @@ open_db(sqlite3 **db)
                 }
         }
 
-	strcat(zdir, "zkc.db");
-	int rc = sqlite3_open(zdir, db);
+        strcat(zdir, "zkc.db");
+        int rc = sqlite3_open(zdir, db);
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open zkc database: %s\n", sqlite3_errmsg(*db));
@@ -165,7 +166,7 @@ new(sqlite3 *db)
 	} else if (getenv("VISUAL") != NULL) {
 	        sprintf(command, "$VISUAL %s", zdir);
 	} else {
-	        sprintf(command, "vi %s", zdir);	  
+	        sprintf(command, "vi %s", zdir);
 	}
 
 	if (system(command) != 0) {
@@ -249,14 +250,21 @@ int
 inbox(sqlite3 *db, int head)
 {
 	char *sql;
-	if (head) {
+	if (head == 1) { // head
 		sql = "SELECT notes.uuid, notes.date, notes.body "
 			"FROM notes "
 			"INNER JOIN inbox "
 			"ON inbox.note_id = notes.id "
 			"ORDER BY date DESC "
 			"LIMIT 1;";
-	} else {
+	} else if (head == -1) { // tail
+		sql = "SELECT notes.uuid, notes.date, notes.body "
+			"FROM notes "
+			"INNER JOIN inbox "
+			"ON inbox.note_id = notes.id "
+			"ORDER BY date ASC "
+			"LIMIT 1;";
+	} else { // whole inbox
 		sql = "SELECT notes.uuid, notes.date, notes.body "
 			"FROM notes "
 			"INNER JOIN inbox "
@@ -308,6 +316,12 @@ view(sqlite3 *db, const char *uuid)
 			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
 			"LIMIT 1;";
+	} else if (!strcmp(uuid, "tail")) {
+		sql = "SELECT body FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1;";
 	} else {
 		sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1;";
 	}
@@ -320,7 +334,7 @@ view(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	if (strcmp(uuid, "head")) {
+	if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 	}
 
@@ -347,6 +361,12 @@ edit(sqlite3 *db, const char *uuid)
 			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
 			"LIMIT 1";
+	} else if (!strcmp(uuid, "tail")) {
+		sql = "SELECT body FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1";
 	} else {
 		sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1;";
 	}
@@ -359,7 +379,7 @@ edit(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	if (strcmp(uuid, "head")) {
+	if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 	}
 
@@ -377,7 +397,7 @@ edit(sqlite3 *db, const char *uuid)
 
         strcpy(zdir, homedir);
         strcat(zdir, "/.zettelkasten/");
-	strcat(zdir, uuid);	
+	strcat(zdir, uuid);
 
 	FILE *fw = fopen(zdir, "wb");
 	if (fw) {
@@ -395,13 +415,13 @@ edit(sqlite3 *db, const char *uuid)
 	} else if (getenv("VISUAL") != NULL) {
 	        sprintf(command, "$VISUAL %s", zdir);
 	} else {
-	        sprintf(command, "vi %s", zdir);	  
+	        sprintf(command, "vi %s", zdir);
 	}
 
 	if (system(command) != 0) {
 	        fprintf(stderr, "Unable to open note with editor!\n");
 	        return 1;
-	}	
+	}
 
 	FILE *fr = fopen(zdir, "rb");
 	if (!fr) {
@@ -433,6 +453,14 @@ edit(sqlite3 *db, const char *uuid)
 				"ORDER BY notes.date DESC "
 				"LIMIT 1"
 				")";
+		} else if (!strcmp(uuid, "tail")) {
+			sql = "UPDATE notes SET BODY = ? WHERE id = "
+				"(SELECT notes.id FROM notes "
+				"INNER JOIN inbox "
+				"ON notes.id = inbox.note_id "
+				"ORDER BY notes.date ASC "
+				"LIMIT 1"
+				")";
 		} else {
 			sql = "UPDATE notes SET body = ? WHERE uuid = ?;";
 		}
@@ -446,7 +474,7 @@ edit(sqlite3 *db, const char *uuid)
 
 		sqlite3_bind_text(stmt, 1, buffer, strlen(buffer), SQLITE_TRANSIENT);
 
-		if (strcmp(uuid, "head")) {
+		if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
 			sqlite3_bind_text(stmt, 2, uuid, strlen(uuid), SQLITE_STATIC);
 		}
 
@@ -560,6 +588,12 @@ spit(sqlite3 *db, const char *uuid, const char *path)
 			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
 			"LIMIT 1;";
+	} else if (!strcmp(uuid, "tail")) {
+		sql = "SELECT body FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1;";
 	} else {
 		sql = "SELECT body FROM notes WHERE uuid = ? LIMIT 1";
 	}
@@ -572,7 +606,7 @@ spit(sqlite3 *db, const char *uuid, const char *path)
 		return rc;
 	}
 
-	if (strcmp(uuid, "head")) {
+	if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 	}
 
@@ -671,11 +705,40 @@ link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 	}
 
 	char *sql;
-	if (!strcmp(uuid_a, "head")) {
+	if (!strcmp(uuid_a, "head") && !strcmp(uuid_b, "tail")) {
 		sql = "INSERT INTO links(a_id, b_id) "
 			"VALUES("
 			"(SELECT notes.id FROM notes "
-			"INNER JOIN inbox ON notes.id = inbox.note_id "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1), "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1)"
+			");";
+	} else if (!strcmp(uuid_a, "tail") && !strcmp(uuid_b, "head")) {
+		sql = "INSERT INTO links(a_id, b_id) "
+			"VALUES("
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1),"
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1)"
+			");";
+	} else if (!strcmp(uuid_a, "head")) {
+		sql = "INSERT INTO links(a_id, b_id) "
+			"VALUES("
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
 			"LIMIT 1), "
 			"(SELECT id FROM notes WHERE uuid = ?)"
@@ -685,8 +748,29 @@ link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 			"VALUES("
 			"(SELECT id FROM notes WHERE uuid = ?), "
 			"(SELECT notes.id FROM notes "
-			"INNER JOIN inbox ON notes.id = inbox.note_id "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
+			"LIMIT 1)"
+			");";
+	} else if (!strcmp(uuid_a, "tail")) {
+		sql = "INSERT INTO links(a_id, b_id) "
+			"VALUES("
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1), "
+			"(SELECT id FROM notes WHERE uuid = ?)"
+			");";
+	} else if (!strcmp(uuid_b, "tail")) {
+		sql = "INSERT INTO links(a_id, b_id) "
+			"VALUES("
+			"(SELECT id FROM notes WHERE uuid = ?), "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
 			"LIMIT 1)"
 			");";
 	} else {
@@ -705,9 +789,17 @@ link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 		return rc;
 	}
 
-	if (!strcmp(uuid_a, "head")) {
+	if (!strcmp(uuid_a, "head") && !strcmp(uuid_b, "tail")) {
+		/* Leave this blank */
+	} else if (!strcmp(uuid_a, "tail") && !strcmp(uuid_b, "head")) {
+		/* Leave this blank */
+	} else if (!strcmp(uuid_a, "head")) {
 		sqlite3_bind_text(stmt, 1, uuid_b, strlen(uuid_b), SQLITE_STATIC);
 	} else if (!strcmp(uuid_b, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+	} else if (!strcmp(uuid_a, "tail")) {
+		sqlite3_bind_text(stmt, 1, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	} else if (!strcmp(uuid_b, "tail")) {
 		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
 	} else {
 		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
@@ -726,7 +818,6 @@ link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 	return rc;
 }
 
-// TODO: Refactor queries into function that accepts sql query as input
 int
 links(sqlite3 *db, const char *uuid)
 {
@@ -746,6 +837,20 @@ links(sqlite3 *db, const char *uuid)
 			"INNER JOIN inbox "
 			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
+			"LIMIT 1));";
+	} else if (!strcmp(uuid, "tail")) {
+		sql = "SELECT uuid, date, body "
+			"FROM notes "
+			"WHERE id = "
+			"(SELECT links.b_id "
+			"FROM links "
+			"INNER JOIN notes "
+			"ON links.a_id = notes.id "
+			"WHERE notes.id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
 			"LIMIT 1));";
 	} else {
 		sql = "SELECT uuid, date, body "
@@ -819,6 +924,20 @@ links(sqlite3 *db, const char *uuid)
 			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
 			"LIMIT 1));";
+	} else if (!strcmp(uuid, "tail")) {
+		sql2 = "SELECT uuid, date, body "
+			"FROM notes "
+			"WHERE id = "
+			"(SELECT links.a_id "
+			"FROM links "
+			"INNER JOIN notes "
+			"ON links.b_id = notes.id "
+			"WHERE notes.id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1));";
 	} else {
 		sql2 = "SELECT uuid, date, body "
 			"FROM notes "
@@ -838,7 +957,7 @@ links(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	if (strcmp(uuid, "head")) {
+	if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
 		sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
 	}
 
@@ -935,6 +1054,14 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 		"ORDER BY notes.date DESC LIMIT 1), "
 		"?"
 		");";
+	} else if (!strcmp(uuid, "tail")) {
+		sql3 = "INSERT INTO note_tags(note_id, tag_id) "
+		"VALUES("
+		"(SELECT notes.id FROM notes "
+		"INNER JOIN inbox ON notes.id = inbox.note_id "
+		"ORDER BY notes.date ASC LIMIT 1), "
+		"?"
+		");";
 	} else {
 		sql3 = "INSERT INTO note_tags(note_id, tag_id) "
 		"VALUES("
@@ -951,7 +1078,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
 		return rc;
 	}
 
-	if (!strcmp(uuid, "head")) {
+	if (!strcmp(uuid, "head") || !strcmp(uuid, "tail")) {
 		sqlite3_bind_int(stmt3, 1, tag_id);
 	} else {
 		sqlite3_bind_text(stmt3, 1, uuid, strlen(uuid), SQLITE_STATIC);
@@ -998,7 +1125,26 @@ tags(sqlite3 *db, const char *uuid)
 				fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
 				return rc;
 			}
+		} else if (!strcmp(uuid, "tail")) {
+			sql = "SELECT tags.body "
+				"FROM tags "
+				"INNER JOIN note_tags "
+				"ON tags.id = note_tags.tag_id "
+				"INNER JOIN notes "
+				"ON notes.id = note_tags.note_id "
+				"WHERE notes.id = "
+				"(SELECT notes.id FROM notes "
+				"INNER JOIN inbox "
+				"ON notes.id = inbox.note_id "
+				"ORDER BY notes.date ASC "
+				"LIMIT 1);";
 
+			rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+			if (rc != SQLITE_OK) {
+				fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+				return rc;
+			}
 		} else {
 			sql = "SELECT tags.body "
 				"FROM tags "
@@ -1061,6 +1207,13 @@ delete_note(sqlite3 *db, const char *uuid)
 			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
 			"LIMIT 1);";
+	} else if (!strcmp(uuid, "tail")) {
+		sql = "DELETE FROM notes WHERE id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1);";
 	} else {
 		sql = "DELETE FROM notes WHERE uuid = ?;";
 	}
@@ -1072,7 +1225,7 @@ delete_note(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	if (strcmp(uuid, "head")) {
+	if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 	}
 
@@ -1130,6 +1283,18 @@ delete_note_tag(sqlite3 *db, const char *uuid, const char *tag_body)
 			"(SELECT tags.id FROM tags "
 			"WHERE tags.body = ? "
 			"LIMIT 1);";
+	} else if (!strcmp(uuid, "tail")) {
+		sql = "DELETE FROM note_tags "
+			"WHERE note_id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1) "
+			"AND tag_id = "
+			"(SELECT tags.id FROM tags "
+			"WHERE tags.body = ? "
+			"LIMIT 1);";
 	} else {
 		sql = "DELETE FROM note_tags "
 			"WHERE note_id = "
@@ -1149,7 +1314,7 @@ delete_note_tag(sqlite3 *db, const char *uuid, const char *tag_body)
 		return rc;
 	}
 
-	if (!strcmp(uuid, "head")) {
+	if (!strcmp(uuid, "head") || !strcmp(uuid, "tail")) {
 		sqlite3_bind_text(stmt, 1, tag_body, strlen(tag_body), SQLITE_STATIC);
 	} else {
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
@@ -1171,14 +1336,35 @@ delete_note_tag(sqlite3 *db, const char *uuid, const char *tag_body)
 int
 delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
+	if (!strcmp(uuid_a, uuid_b)) {
+		fprintf(stderr, "Notes don't link to themselves!");
+		return SQLITE_OK;
+	}
+
 	char *sql;
-	if (!strcmp(uuid_a, "head")) {
+	if (!strcmp(uuid_a, "head") && !strcmp(uuid_b, "tail")) {
+		sql = "DELETE FROM links "
+			"WHERE a_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date DESC LIMIT 1) "
+			"AND b_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date ASC LIMIT 1);";
+	} else if (!strcmp(uuid_a, "tail") && !strcmp(uuid_b, "head")) {
+		sql = "DELETE FROM links "
+			"WHERE a_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date ASC LIMIT 1) "
+			"AND b_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date DESC LIMIT 1);";
+	} else if (!strcmp(uuid_a, "head")) {
 		sql = "DELETE FROM links "
 			"WHERE a_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date DESC LIMIT 1) "
 			"AND b_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
 	} else if (!strcmp(uuid_b, "head")) {
 		sql = "DELETE FROM links "
 			"WHERE b_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date DESC LIMIT 1) "
+			"AND a_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
+	} else if (!strcmp(uuid_a, "tail")) {
+		sql = "DELETE FROM links "
+			"WHERE a_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date ASC LIMIT 1) "
+			"AND b_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
+	} else if (!strcmp(uuid_b, "tail")) {
+		sql = "DELETE FROM links "
+			"WHERE b_id = (SELECT notes.id FROM notes INNER JOIN inbox ON notes.id = inbox.note_id ORDER BY notes.date ASC LIMIT 1) "
 			"AND a_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
 	} else {
 		sql = "DELETE FROM links "
@@ -1193,9 +1379,17 @@ delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 		return rc;
 	}
 
-	if (!strcmp(uuid_a, "head")) {
+	if (!strcmp(uuid_a, "head") && !strcmp(uuid_b, "tail")) {
+		/* Leave blank */
+	} else if (!strcmp(uuid_a, "tail") && !strcmp(uuid_b, "head")) {
+		/* Leave blank */
+	} else if (!strcmp(uuid_a, "head")) {
 		sqlite3_bind_text(stmt, 1, uuid_b, strlen(uuid_b), SQLITE_STATIC);
 	} else if (!strcmp(uuid_b, "head")) {
+		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);	
+	} else if (!strcmp(uuid_a, "tail")) {
+		sqlite3_bind_text(stmt, 1, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	} else if (!strcmp(uuid_b, "tail")) {
 		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
 	} else {
 		sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
@@ -1225,6 +1419,12 @@ archive(sqlite3 *db, const char *uuid)
 			"INNER JOIN notes "
 			"ON note_id = notes.id "
 			"ORDER BY notes.date DESC LIMIT 1)";
+	} else if (!strcmp(uuid, "tail")) {
+		sql = "DELETE FROM inbox WHERE note_id = "
+			"(SELECT note_id FROM inbox "
+			"INNER JOIN notes "
+			"ON note_id = notes.id "
+			"ORDER BY notes.date ASC LIMIT 1)";
 	} else {
 		sql = "DELETE FROM inbox WHERE note_id = "
 			"(SELECT id FROM notes WHERE uuid = ?);";
@@ -1236,7 +1436,7 @@ archive(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	if (strcmp(uuid, "head")) {
+	if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 	}
 

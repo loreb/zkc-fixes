@@ -29,6 +29,10 @@ main(int argc, char **argv)
 		} else if (!strcmp(argv[1], "head")) {
 			rc = inbox(db, 1);
 			if (rc != SQLITE_OK)
+				goto end;
+		} else if (!strcmp(argv[1], "tail")) {
+			rc = inbox(db, -1);
+			if (rc != SQLITE_OK)
 				goto end;			
 		} else if (!strcmp(argv[1], "new")) {
 			rc = new(db);
