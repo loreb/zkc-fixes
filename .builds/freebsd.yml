@@ -1,0 +1,14 @@
+image: freebsd/latest
+packages:
+  - pkgconf
+  - meson
+  - samurai
+  - sqlite3
+  - e2fsprogs-libuuid
+tasks:
+  - build: |
+      cd zkc
+      meson build
+      samu -C build
+sources:
+  - https://git.sr.ht/~fancycade/zkc

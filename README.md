@@ -10,15 +10,17 @@
 
     sudo ninja -C build install
 
-Only tested on linux so far, shouldn't be difficult to get to work on other OS's.
-
 ## Alpine
 
-    sudo apk add sqlite-dev util-linux-dev
+    doas apk add sqlite-dev util-linux-dev
 
 ## Debian
 
     sudo apt install libsqlite3-dev uuid-dev
+
+## FreeBSD
+
+    doas pkg install sqlite3 e2fsprogs-libuuid
 
 # Usage
 
