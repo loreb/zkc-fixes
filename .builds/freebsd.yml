@@ -4,7 +4,7 @@ packages:
   - meson
   - samurai
   - sqlite3
-  - e2fsprogs-libuuid
+  - openssl
 tasks:
   - build: |
       cd zkc

@@ -3,7 +3,7 @@ packages:
   - meson
   - samurai
   - sqlite-dev
-  - util-linux-dev  
+  - openssl-dev  
 tasks:
   - build: |
       cd zkc

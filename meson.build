@@ -35,7 +35,7 @@ add_project_arguments(cc.get_supported_arguments([
 app_inc = include_directories('include')
 
 sqlite3 = dependency('sqlite3')
-uuid = dependency('uuid')
+ssl = dependency('openssl')
 
 src_files = [
 	'src/main.c',
@@ -46,7 +46,7 @@ executable(
 	'zkc',
 	files(src_files),
 	install: true,
-	dependencies: [sqlite3, uuid],
+	dependencies: [sqlite3, ssl],
 	include_directories: [app_inc],
 	#link_args: ['-static']
 )
