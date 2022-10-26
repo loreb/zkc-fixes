@@ -139,7 +139,8 @@ create_tables(sqlite3 *db)
 	const char *create_notes = "CREATE TABLE IF NOT EXISTS notes("
 		"id INTEGER PRIMARY KEY, "
 		"uuid VARCHAR(36) NOT NULL, "
-		"body TEXT NOT NULL, "
+    "body TEXT NOT NULL, "
+		"hash TEXT NOT NULL, "
 		"date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
 		");";
 
@@ -243,7 +244,7 @@ new(sqlite3 *db)
 	int rc = SQLITE_OK;
 
 	if (buffer) {
-		char *sql = "INSERT INTO notes(uuid, body) VALUES(?, ?);";
+		char *sql = "INSERT INTO notes(uuid, body, hash) VALUES(?, ?, ?);";
 		sqlite3_stmt *stmt;
 		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
@@ -251,9 +252,13 @@ new(sqlite3 *db)
 			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
 			goto end;
 		}
+		
+		char hash[65];
+		sha256_string(buffer, hash);
 
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 		sqlite3_bind_text(stmt, 2, buffer, strlen(buffer), SQLITE_TRANSIENT);
+		sqlite3_bind_text(stmt, 3, hash, strlen(hash), SQLITE_STATIC);
 
 		rc = sqlite3_step(stmt);
 
@@ -496,7 +501,7 @@ edit(sqlite3 *db, const char *uuid)
 	if (buffer) {
 		char *sql;
 		if (!strcmp(uuid, "head")) {
-			sql = "UPDATE notes SET BODY = ? WHERE id = "
+			sql = "UPDATE notes SET body = ?, hash = ? WHERE id = "
 				"(SELECT notes.id FROM notes "
 				"INNER JOIN inbox "
 				"ON notes.id = inbox.note_id "
@@ -504,7 +509,7 @@ edit(sqlite3 *db, const char *uuid)
 				"LIMIT 1"
 				")";
 		} else if (!strcmp(uuid, "tail")) {
-			sql = "UPDATE notes SET BODY = ? WHERE id = "
+			sql = "UPDATE notes SET body = ?, hash = ? WHERE id = "
 				"(SELECT notes.id FROM notes "
 				"INNER JOIN inbox "
 				"ON notes.id = inbox.note_id "
@@ -512,7 +517,7 @@ edit(sqlite3 *db, const char *uuid)
 				"LIMIT 1"
 				")";
 		} else {
-			sql = "UPDATE notes SET body = ? WHERE uuid = ?;";
+			sql = "UPDATE notes SET body = ?, hash = ? WHERE uuid = ?;";
 		}
 		sqlite3_stmt *stmt;
 		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -522,10 +527,14 @@ edit(sqlite3 *db, const char *uuid)
 			goto end;
 		}
 
+    char hash[65];
+		sha256_string(buffer, hash);
+		
 		sqlite3_bind_text(stmt, 1, buffer, strlen(buffer), SQLITE_TRANSIENT);
+		sqlite3_bind_text(stmt, 2, hash, strlen(hash), SQLITE_STATIC);
 
 		if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
-			sqlite3_bind_text(stmt, 2, uuid, strlen(uuid), SQLITE_STATIC);
+			sqlite3_bind_text(stmt, 3, uuid, strlen(uuid), SQLITE_STATIC);
 		}
 
 		rc = sqlite3_step(stmt);
@@ -568,7 +577,7 @@ slurp(sqlite3 *db, const char *path)
 	int rc = SQLITE_OK;
 
 	if (buffer) {
-		char *sql = "INSERT INTO notes(uuid, body) VALUES(?, ?);";
+		char *sql = "INSERT INTO notes(uuid, body, hash) VALUES(?, ?, ?);";
 		sqlite3_stmt *stmt;
 		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
@@ -579,9 +588,13 @@ slurp(sqlite3 *db, const char *path)
 
 		char uuid[38];
 		uuid_v4_gen(uuid);
+		
+		char hash[65];
+		sha256_string(buffer, hash);
 
 		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
 		sqlite3_bind_text(stmt, 2, buffer, strlen(buffer), SQLITE_TRANSIENT);
+		sqlite3_bind_text(stmt, 3, hash, strlen(hash), SQLITE_STATIC);
 
 		rc = sqlite3_step(stmt);
 
@@ -1467,6 +1480,7 @@ archive(sqlite3 *db, const char *uuid)
 			"ON note_id = notes.id "
 			"ORDER BY notes.date DESC LIMIT 1)";
 	} else if (!strcmp(uuid, "tail")) {
+
 		sql = "DELETE FROM inbox WHERE note_id = "
 			"(SELECT note_id FROM inbox "
 			"INNER JOIN notes "
