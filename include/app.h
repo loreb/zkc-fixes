@@ -64,4 +64,7 @@ delete_note_tag(sqlite3 *db, const char *uuid, const char *tag_body);
 int
 archive(sqlite3 *db, const char *uuid);
 
+int
+diff(sqlite3 *db, const char *path);
+
 #endif

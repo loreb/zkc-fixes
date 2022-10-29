@@ -78,6 +78,10 @@ main(int argc, char **argv)
 			rc = archive(db, argv[2]);
 			if (rc != SQLITE_OK)
 				goto end;
+		} else if (!strcmp(argv[1], "diff")) {
+		  rc = diff(db, argv[2]);
+			if (rc != SQLITE_OK)
+			  goto end;
 		} else {
 			printf("Invalid command: %s\n", argv[1]);
 		}

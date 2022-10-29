@@ -1512,3 +1512,190 @@ archive(sqlite3 *db, const char *uuid)
 
 	return rc;
 }
+
+static int
+diff_tags_callback(void *data, int argc, char **argv, char **col_names)
+{
+	sqlite3 *db = (sqlite3 *)data;
+
+	char *body = argv[0];
+	
+	char *sql = "SELECT 1 FROM tags WHERE body = ?";
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+	
+	sqlite3_bind_text(stmt, 1, body, strlen(body), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	// Tag doesn't exist in db
+	if (rc == SQLITE_DONE) {
+	  printf("%s\n", body);
+	}
+	
+	return SQLITE_OK;
+}
+
+static int
+diff_notes_callback(void *data, int argc, char **argv, char **col_names)
+{
+	sqlite3 *db = (sqlite3 *)data;
+	
+	char *uuid = argv[0];
+	char *hash = argv[1];
+	
+	char *sql = "SELECT 1 FROM notes WHERE uuid = ? AND hash = ?;";
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+	
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, hash, strlen(hash), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	// Note either doesn't exist or is different in db
+	if (rc == SQLITE_DONE) {
+		printf("%s\n", uuid);
+	}
+	
+	return SQLITE_OK;
+}
+
+static int
+diff_note_tags_callback(void *data, int argc, char **argv, char **col_names)
+{
+	sqlite3 *db = (sqlite3 *)data;
+	
+	char *uuid = argv[0];
+	char *body = argv[1];
+	
+	char *sql = "SELECT 1 FROM note_tags "
+		"INNER JOIN notes ON note_tags.note_id = notes.id "
+		"INNER JOIN tags ON note_tags.tag_id = tags.id "
+		"WHERE notes.uuid = ? AND tags.body = ?;";
+
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+		
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, body, strlen(body), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	// Note tag doesn't exist
+	if (rc == SQLITE_DONE) {
+		printf("%s %s\n", body, uuid);
+	}
+	
+	return SQLITE_OK;
+}
+
+static int
+diff_note_links_callback(void *data, int argc, char **argv, char **col_names)
+{
+	sqlite3 *db = (sqlite3 *)data;
+	
+	char *uuid_a = argv[0];
+	char *uuid_b = argv[1];
+	
+	char *sql = "SELECT 1 FROM links "
+	  "INNER JOIN notes notes_a ON links.a_id = notes_a.id "
+		"INNER JOIN notes notes_b ON links.b_id = notes_b.id "
+		"WHERE notes_a = ? AND notes_b = ?;";
+		
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+	
+	sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	// Note link doesn't exist
+	if (rc == SQLITE_DONE) {
+		printf("%s %s\n", uuid_a, uuid_b);
+	}
+	
+	return SQLITE_OK;
+}
+
+int
+diff(sqlite3 *db, const char *path)
+{
+  sqlite3 *db2;
+	int rc = 1;
+	
+	rc = sqlite3_open(path, &db2);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot open zkc database: %s\n", path);
+		goto end;
+	}
+	
+	printf("tags diff:\n");
+	
+	char *sql = "SELECT body FROM tags;";
+	
+	char *err_msg = NULL;
+	rc = sqlite3_exec(db2, sql, diff_tags_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to query tags\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	
+	printf("notes diff:\n");
+	
+	sql = "SELECT uuid, hash FROM notes;";
+	rc = sqlite3_exec(db2, sql, diff_notes_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to query notes\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	
+	printf("note tags diff:\n");
+	
+	sql = "SELECT notes.uuid, tags.body FROM note_tags "
+		"INNER JOIN notes ON note_tags.note_id = notes.id "
+		"INNER JOIN tags ON note_tags.tag_id = tags.id;";
+	
+	rc = sqlite3_exec(db2, sql, diff_note_tags_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to query note tags\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	
+	printf("note links diff\n");
+	
+	sql = "SELECT notes_a.uuid, notes_b.uuid FROM links "
+		"INNER JOIN notes notes_a ON links.a_id = notes_a.id "
+		"INNER JOIN notes notes_b ON links.b_id = notes_b.id;";
+		
+	rc = sqlite3_exec(db2, sql, diff_note_links_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to query note links\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+
+end:
+  sqlite3_close(db2);
+	return rc;
+}
