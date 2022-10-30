@@ -501,7 +501,7 @@ edit(sqlite3 *db, const char *uuid)
 	if (buffer) {
 		char *sql;
 		if (!strcmp(uuid, "head")) {
-			sql = "UPDATE notes SET body = ?, hash = ? WHERE id = "
+			sql = "UPDATE notes SET body = ?, hash = ?, date = datetime() WHERE id = "
 				"(SELECT notes.id FROM notes "
 				"INNER JOIN inbox "
 				"ON notes.id = inbox.note_id "
@@ -509,7 +509,7 @@ edit(sqlite3 *db, const char *uuid)
 				"LIMIT 1"
 				")";
 		} else if (!strcmp(uuid, "tail")) {
-			sql = "UPDATE notes SET body = ?, hash = ? WHERE id = "
+			sql = "UPDATE notes SET body = ?, hash = ?, date = datetime() WHERE id = "
 				"(SELECT notes.id FROM notes "
 				"INNER JOIN inbox "
 				"ON notes.id = inbox.note_id "
@@ -517,7 +517,7 @@ edit(sqlite3 *db, const char *uuid)
 				"LIMIT 1"
 				")";
 		} else {
-			sql = "UPDATE notes SET body = ?, hash = ? WHERE uuid = ?;";
+			sql = "UPDATE notes SET body = ?, hash = ?, date = datetime() WHERE uuid = ?;";
 		}
 		sqlite3_stmt *stmt;
 		rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
