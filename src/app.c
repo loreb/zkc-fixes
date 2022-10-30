@@ -1459,7 +1459,7 @@ delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 	rc = sqlite3_step(stmt);
 
 	if (rc != SQLITE_DONE) {
-		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
 		return rc;
 	}
 
@@ -1640,31 +1640,31 @@ diff(sqlite3 *db, const char *path)
 {
   sqlite3 *db2;
 	int rc = 1;
-	
+	char *err_msg = NULL;
+
 	rc = sqlite3_open(path, &db2);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open zkc database: %s\n", path);
 		goto end;
 	}
-	
-	printf("tags diff:\n");
-	
-	char *sql = "SELECT body FROM tags;";
-	
-	char *err_msg = NULL;
-	rc = sqlite3_exec(db2, sql, diff_tags_callback, db, &err_msg);
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Failed to query tags\n");
-		fprintf(stderr, "SQL Error: %s\n", err_msg);
-		sqlite3_free(err_msg);
-	}
-	
+
 	printf("notes diff:\n");
 	
-	sql = "SELECT uuid, hash FROM notes;";
+	char *sql = "SELECT uuid, hash FROM notes;";
 	rc = sqlite3_exec(db2, sql, diff_notes_callback, db, &err_msg);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Failed to query notes\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+
+	printf("tags diff:\n");
+	
+	sql = "SELECT body FROM tags;";
+	
+	rc = sqlite3_exec(db2, sql, diff_tags_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to query tags\n");
 		fprintf(stderr, "SQL Error: %s\n", err_msg);
 		sqlite3_free(err_msg);
 	}
@@ -1697,5 +1697,358 @@ diff(sqlite3 *db, const char *path)
 
 end:
   sqlite3_close(db2);
+	return rc;
+}
+
+static int
+merge_notes_callback(void *data, int argc, char **argv, char **col_names)
+{
+	sqlite3 *db = (sqlite3 *)data;
+	
+	char *uuid = argv[0];
+	char *hash = argv[1];
+	char *body = argv[2];
+	char *date = argv[3];
+	char *date_temp = argv[4];
+	
+	int date_int = atoi(date_temp);
+	
+	char *sql = "SELECT hash, body, date, unixepoch(date) FROM notes WHERE uuid = ? LIMIT 1;";
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	if (rc == SQLITE_DONE) {
+		sql = "INSERT INTO notes (uuid, hash, body, date) VALUES (?, ?, ?, ?);";
+		sqlite3_stmt *stmt2;
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+		
+		sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
+		sqlite3_bind_text(stmt2, 2, hash, strlen(hash), SQLITE_STATIC);
+		sqlite3_bind_text(stmt2, 3, body, strlen(body), SQLITE_STATIC);
+		sqlite3_bind_text(stmt2, 4, date, strlen(date), SQLITE_STATIC);
+		
+		rc = sqlite3_step(stmt2);
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+		
+		sqlite3_finalize(stmt2);
+		return SQLITE_OK;
+	
+	} else if (rc == SQLITE_ROW) {
+		//char *body2 = (char *)sqlite3_column_text(stmt, 0);
+		char *hash2 = (char *)sqlite3_column_text(stmt, 1);
+		//char *date2 = (char *)sqlite3_column_text(stmt, 2);
+		char *date_temp2 = (char *)sqlite3_column_text(stmt, 3);
+		
+		int date_int2 = atoi(date_temp2);
+		
+		// Hashes are equivalent
+		if (!strcmp(hash, hash2)) {
+		  fprintf(stderr, "Hash equivalent!\n");
+			return SQLITE_OK;
+		} else if (date_int2 >= date_int) {
+			return SQLITE_OK;
+		} else {
+
+			sql = "UPDATE notes SET body = ?, hash = ?, date = ? WHERE uuid = ?;";
+		
+			sqlite3_stmt *stmt2;
+			rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
+			if (rc != SQLITE_OK) {
+				fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+				return rc;
+			}
+		
+			sqlite3_bind_text(stmt2, 1, body, strlen(body), SQLITE_STATIC);
+			sqlite3_bind_text(stmt2, 2, hash, strlen(hash), SQLITE_STATIC);
+			sqlite3_bind_text(stmt2, 3, date, strlen(date), SQLITE_STATIC);	
+			sqlite3_bind_text(stmt2, 4, uuid, strlen(uuid), SQLITE_STATIC);
+
+			rc = sqlite3_step(stmt2);
+			if (rc != SQLITE_DONE) {
+				fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+				return rc;
+			}
+		
+			sqlite3_finalize(stmt2);
+			return SQLITE_OK;
+		}
+	}
+	
+	return rc;
+}
+
+static int
+merge_tags_callback(void *data, int argc, char **argv, char **col_names)
+{
+
+  sqlite3 *db = (sqlite3 *)data;
+
+  char *body = argv[0];
+	
+	char *sql = "SELECT 1 FROM tags WHERE body = ?;";
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+	
+	sqlite3_bind_text(stmt, 1, body, strlen(body), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	if (rc == SQLITE_DONE) {
+		sql = "INSERT INTO tags (body) VALUES (?);";
+		
+		sqlite3_stmt *stmt2;
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+		
+		sqlite3_bind_text(stmt2, 1, body, strlen(body), SQLITE_STATIC);
+		
+		rc = sqlite3_step(stmt2);
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+		
+		sqlite3_finalize(stmt2);
+	}
+	
+	return SQLITE_OK;
+}
+
+static int
+merge_note_tags_callback(void *data, int argc, char **argv, char **col_names)
+{
+	sqlite3 *db = (sqlite3 *)data;
+	
+	char *uuid = argv[0];
+	char *body = argv[1];
+	
+	char *sql = "SELECT 1 FROM note_tags "
+		"INNER JOIN notes ON note_tags.note_id "
+		"INNER JOIN tags ON note_tags.tag_id "
+		"WHERE notes.uuid = ? AND tags.body = ?;";
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+	
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, body, strlen(body), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	if (rc == SQLITE_DONE) {
+		sql = "INSERT INTO note_tags (note_id, tag_id) VALUES ("
+		  "(SELECT id FROM notes WHERE uuid = ? LIMIT 1), "
+			"(SELECT id FROM tags WHERE body = ? LIMIT 1));";
+		
+		sqlite3_stmt *stmt2;
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+		
+		sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
+		sqlite3_bind_text(stmt2, 2, body, strlen(body), SQLITE_STATIC);
+		
+		rc = sqlite3_step(stmt2);
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+		
+		sqlite3_finalize(stmt2);
+	}
+	
+	return SQLITE_OK;
+}
+
+static int
+merge_links_callback(void *data, int argc, char **argv, char **col_names)
+{
+	sqlite3 *db = (sqlite3 *)data;
+	
+	char *uuid_a = argv[0];
+	char *uuid_b = argv[1];
+	
+	char *sql = "SELECT 1 FROM links "
+	  "INNER JOIN notes notes_a ON links.a_id = notes_a.id "
+		"INNER JOIN notes notes_b ON links.b_id = notes_b.id "
+		"WHERE notes_a.uuid = ? AND notes_b.uuid = ?;";
+	
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+	
+	sqlite3_bind_text(stmt, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	if (rc == SQLITE_DONE) {
+		sql = "INSERT INTO links (a_id, b_id) VALUES ("
+		  "(SELECT id FROM notes WHERE uuid = ? LIMIT 1),"
+			"(SELECT id FROM notes WHERE uuid = ? LIMIT 1));";
+			
+		sqlite3_stmt *stmt2;
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		sqlite3_bind_text(stmt2, 1, uuid_a, strlen(uuid_a), SQLITE_STATIC);
+		sqlite3_bind_text(stmt2, 2, uuid_b, strlen(uuid_b), SQLITE_STATIC);
+		
+		rc = sqlite3_step(stmt2);
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+		
+		sqlite3_finalize(stmt2);
+	}
+	
+	return SQLITE_OK;
+}
+
+static int
+merge_inbox_callback(void *data, int argc, char **argv, char **col_names)
+{
+	sqlite3 *db = (sqlite3 *)data;
+	
+	char *uuid = argv[0];
+	
+	char *sql = "SELECT 1 FROM inbox "
+	  "INNER JOIN notes ON inbox.note_id = notes.id "
+		"WHERE notes.uuid = ?;";
+	
+	sqlite3_stmt *stmt;
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+	
+	sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	
+	rc = sqlite3_step(stmt);
+	
+	if (rc == SQLITE_DONE) {
+	  sql = "INSERT INTO inbox (note_id) VALUES ("
+		  "(SELECT id FROM notes WHERE uuid = ? LIMIT 1));";
+		
+    sqlite3_stmt *stmt2;
+		rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
+		if (rc != SQLITE_OK) {
+			fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+
+		sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
+		
+		rc = sqlite3_step(stmt2);
+		if (rc != SQLITE_DONE) {
+			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+			return rc;
+		}
+	}
+	
+	return SQLITE_OK;
+}
+
+int
+merge(sqlite3 *db, const char *path)
+{
+	sqlite3 *db2;
+	int rc = 1;
+	char *err_msg = NULL;
+
+	rc = sqlite3_open(path, &db2);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot open zkc database: %s\n", path);
+		goto end;
+	}
+	
+	// merge notes
+	
+	char *sql = "SELECT uuid, hash, body, date, unixepoch(date) FROM notes;";
+	rc = sqlite3_exec(db2, sql, merge_notes_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to merge notes\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	
+	// merge tags
+	sql = "SELECT body FROM tags;";
+	rc = sqlite3_exec(db2, sql, merge_tags_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to merge tags\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	
+	// merge note tags
+	sql = "SELECT notes.uuid, tags.body FROM note_tags "
+	  "INNER JOIN notes ON note_tags.note_id "
+		"INNER JOIN tags ON note_tags.tag_id;";
+	rc = sqlite3_exec(db2, sql, merge_note_tags_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to merge note tags\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	
+	// merge links
+	sql = "SELECT notes_a.uuid, notes_b.uuid FROM links "
+	  "INNER JOIN notes notes_a ON links.a_id = notes_a.id "
+		"INNER JOIN notes notes_b ON links.b_id = notes_b.id;";
+	rc = sqlite3_exec(db2, sql, merge_links_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to merge note tags\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	
+	// merge inbox
+	sql = "SELECT notes.uuid FROM inbox "
+	  "INNER JOIN notes ON inbox.note_id = notes.id;";
+	rc = sqlite3_exec(db2, sql, merge_inbox_callback, db, &err_msg);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Failed to merge inbox\n");
+		fprintf(stderr, "SQL Error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	
+end:
+	sqlite3_close(db2);
 	return rc;
 }

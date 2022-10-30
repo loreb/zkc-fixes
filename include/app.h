@@ -67,4 +67,7 @@ archive(sqlite3 *db, const char *uuid);
 int
 diff(sqlite3 *db, const char *path);
 
+int
+merge(sqlite3 *db, const char *path);
+
 #endif
