@@ -1713,7 +1713,7 @@ merge_notes_callback(void *data, int argc, char **argv, char **col_names)
 	
 	int date_int = atoi(date_temp);
 	
-	char *sql = "SELECT hash, body, date, unixepoch(date) FROM notes WHERE uuid = ? LIMIT 1;";
+	char *sql = "SELECT hash, unixepoch(date) FROM notes WHERE uuid = ? LIMIT 1;";
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 	if (rc != SQLITE_OK) {
@@ -1749,10 +1749,8 @@ merge_notes_callback(void *data, int argc, char **argv, char **col_names)
 		return SQLITE_OK;
 	
 	} else if (rc == SQLITE_ROW) {
-		//char *body2 = (char *)sqlite3_column_text(stmt, 0);
-		char *hash2 = (char *)sqlite3_column_text(stmt, 1);
-		//char *date2 = (char *)sqlite3_column_text(stmt, 2);
-		char *date_temp2 = (char *)sqlite3_column_text(stmt, 3);
+		char *hash2 = (char *)sqlite3_column_text(stmt, 0);
+		char *date_temp2 = (char *)sqlite3_column_text(stmt, 1);
 		
 		int date_int2 = atoi(date_temp2);
 		
