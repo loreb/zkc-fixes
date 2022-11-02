@@ -76,8 +76,10 @@ help(void)
 	       "links     - [uuid] - display forward and backward links for note.\n"
 	       "tag       - [uuid] [tag] - tag note\n"
 	       "tags      - [uuid] - list tags for note. list all tags by default.\n"
-	       "delete    - [delete_type|uuid] [uuid|tag_name] [uuid|tag_name] - delete note , tag, note_tag, or link.\n"
+	       "delete    - [delete_type|uuid] [uuid|tag_name] [uuid|tag_name] - delete note, tag, note_tag, or link.\n"
 	       "archive   - [uuid] - move note out of inbox.\n"
+				 "diff      - [path] - display differences with database at path.\n"
+				 "merge     - [path] - merge differences from database at path.\n"
 	      );
 }
 
@@ -2016,7 +2018,6 @@ merge(sqlite3 *db, const char *path)
 	}
 	
 	// merge notes
-	
 	char *sql = "SELECT uuid, hash, body, date, unixepoch(date) FROM notes;";
 	rc = sqlite3_exec(db2, sql, merge_notes_callback, db, &err_msg);
 	if (rc != SQLITE_OK) {

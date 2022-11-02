@@ -40,8 +40,8 @@ zkc stores notes, tags, and links in a sqlite database stored at ~HOME/.zettelka
 
 ## Workflow
 
-The recommended workflow is to create a note that is added to the inbox. The most recent note
-in the inbox can be referenced as "head".
+The recommended workflow is to create a note. All new notes are added to the inbox. The most recent note
+in the inbox can be referenced as "head". The oldest note in the inbox can be referenced as "tail".
 
 Ex:
 
@@ -49,7 +49,7 @@ Ex:
 
 The point is to be able to save notes as inspiration strikes. Then you can later go through
 the inbox to either tag, link, or delete a note. Once you are happy, you can archive the note
-and move it out of the inbox. While order isn't necessary, working on the head note is the
+and move it out of the inbox. While order isn't necessary, working on the head or tail note is the
 most convenient. This way you don't have to copy and paste uuid's constantly.
 
 ## Example Workflow
@@ -71,6 +71,7 @@ Once notes are moved out of the inbox and into the archive you'll still be able 
 This will return all the notes that have the word "foobar".
 
 There are two types of searches text matching and tag matching. The default is text as seen above.
+Which is equivalent to:
 
     zkc search text foobar
 
@@ -81,9 +82,44 @@ To search for all notes that are tagged with foobar.
 ## Editor
 
 When opening an editor zkc follows the same process as git. This means it will try to see if
-EDITOR or VISUAL are set. If not, then it will fall back to vi.
+EDITOR or VISUAL are set. If not, then it will fall back to vi. This is similar to how git works.
 
 If ZKC_EDITOR is set it will take precedence over all other options.
+
+## Merging
+
+The downside of using sqlite as the storage layer for zkc is that merging notes
+from one computer to the other doesn't work. You would overwrite data with the
+new copy of the database. Note systems that use a file per note don't suffer
+from this problem in the same way. One can store the notes in a dropbox or nextcloud
+and the system would sync the different files together. 
+
+In order to work around this problem, I implemented a very basic merging and 
+diff strategy. All notes have an associated hash of the note body. The merging
+algorithm will check if a uuid exists in both databases, if it doesn't exist 
+in both, it will add it to the database that is being merged into. Merges are 
+not bidirectional. If the uuid exists in both databases, it will check the hash. 
+If the hash is different, it will then check if the timestamp is greater. If the
+timestamp is greater in the other database it will update the note in the 
+database that is being merged into. If the timestamp is less, it will keep the 
+existing note unchanged.
+
+The workflow when merging looks like this:
+
+    zkc diff other_zkc.db
+        
+The diff command will display any mergeable differences with other_zkc.db.
+If there are mergeable differences you can then run the merge command:
+
+    zkc merge other_zkc.db
+
+After this if you run the diff command again you should see no differences.
+
+One thing to keep in mind with this strategy is that deletes won't persist after
+a merge, if the database that the merge is coming from still has that note, tag, or link.
+The recommended workaround is after a delete, one should overwrite all copies of the database
+with that version. This is a downside of the simple merging strategy. The tradeoff being made
+to prioritize not accidentally deleting data.
 
 # License
 
