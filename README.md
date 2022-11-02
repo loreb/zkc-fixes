@@ -12,15 +12,15 @@
 
 ## Alpine
 
-    doas apk add sqlite-dev util-linux-dev
+    doas apk add sqlite-dev openssl-dev
 
 ## Debian
 
-    sudo apt install libsqlite3-dev uuid-dev
+    sudo apt install libsqlite3-dev libssl-dev
 
 ## FreeBSD
 
-    doas pkg install sqlite3 e2fsprogs-libuuid
+    doas pkg install sqlite3 openssl
 
 # Usage
 
