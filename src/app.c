@@ -1662,7 +1662,7 @@ diff(sqlite3 *db, const char *path)
 	int rc = 1;
 	char *err_msg = NULL;
 
-	rc = sqlite3_open(path, &db2);
+	rc = sqlite3_open_v2(path, &db2, SQLITE_OPEN_READONLY, NULL);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open zkc database: %s\n", path);
 		goto end;
@@ -2010,7 +2010,7 @@ merge(sqlite3 *db, const char *path)
 	int rc = 1;
 	char *err_msg = NULL;
 
-	rc = sqlite3_open(path, &db2);
+	rc = sqlite3_open_v2(path, &db2, SQLITE_OPEN_READONLY, NULL);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open zkc database: %s\n", path);
 		goto end;
