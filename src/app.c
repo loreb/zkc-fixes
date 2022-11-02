@@ -1633,7 +1633,7 @@ diff_note_links_callback(void *data, int argc, char **argv, char **col_names)
 	char *sql = "SELECT 1 FROM links "
 	  "INNER JOIN notes notes_a ON links.a_id = notes_a.id "
 		"INNER JOIN notes notes_b ON links.b_id = notes_b.id "
-		"WHERE notes_a = ? AND notes_b = ?;";
+		"WHERE notes_a.uuid = ? AND notes_b.uuid = ?;";
 		
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
@@ -1776,7 +1776,6 @@ merge_notes_callback(void *data, int argc, char **argv, char **col_names)
 		
 		// Hashes are equivalent
 		if (!strcmp(hash, hash2)) {
-		  fprintf(stderr, "Hash equivalent!\n");
 			return SQLITE_OK;
 		} else if (date_int2 >= date_int) {
 			return SQLITE_OK;
@@ -1863,8 +1862,8 @@ merge_note_tags_callback(void *data, int argc, char **argv, char **col_names)
 	char *body = argv[1];
 	
 	char *sql = "SELECT 1 FROM note_tags "
-		"INNER JOIN notes ON note_tags.note_id "
-		"INNER JOIN tags ON note_tags.tag_id "
+		"INNER JOIN notes ON note_tags.note_id = notes.id "
+		"INNER JOIN tags ON note_tags.tag_id = tags.id "
 		"WHERE notes.uuid = ? AND tags.body = ?;";
 
 	sqlite3_stmt *stmt;
@@ -1899,7 +1898,7 @@ merge_note_tags_callback(void *data, int argc, char **argv, char **col_names)
 			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
 			return rc;
 		}
-		
+
 		sqlite3_finalize(stmt2);
 	}
 	
@@ -2037,8 +2036,8 @@ merge(sqlite3 *db, const char *path)
 	
 	// merge note tags
 	sql = "SELECT notes.uuid, tags.body FROM note_tags "
-	  "INNER JOIN notes ON note_tags.note_id "
-		"INNER JOIN tags ON note_tags.tag_id;";
+	  "INNER JOIN notes ON note_tags.note_id = notes.id "
+		"INNER JOIN tags ON note_tags.tag_id = tags.id;";
 	rc = sqlite3_exec(db2, sql, merge_note_tags_callback, db, &err_msg);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Failed to merge note tags\n");
