@@ -85,26 +85,27 @@ int
 open_db(sqlite3 **db)
 {
 	char zdir[200];
-        char* homedir = getenv("HOME");
-        if (homedir == NULL)
-                homedir = getpwuid(getuid())->pw_dir;
+  char* homedir = getenv("HOME");
+  if (homedir == NULL) {
+  	homedir = getpwuid(getuid())->pw_dir;
+	}
 
-        strcpy(zdir, homedir);
-        strcat(zdir, "/.zettelkasten/");
+  strcpy(zdir, homedir);
+  strcat(zdir, "/.zettelkasten/");
 
-        DIR* dr = opendir(zdir);
-        if (dr == NULL) {
-                int result = mkdir(zdir, 0777);
-                if (result != 0) {
-                        printf("Failed to create zettelkasten directory\n");
-                        return 1;
-                } else {
-                        printf("Initialized zettelkasten directory in $HOME\n");
-                }
-        }
+  DIR* dr = opendir(zdir);
+  if (dr == NULL) {
+  	int result = mkdir(zdir, 0777);
+    if (result != 0) {
+    	printf("Failed to create zettelkasten directory\n");
+      return 1;
+    } else {
+      printf("Initialized zettelkasten directory in $HOME\n");
+    }
+  }
 
-        strcat(zdir, "zkc.db");
-        int rc = sqlite3_open(zdir, db);
+  strcat(zdir, "zkc.db");
+  int rc = sqlite3_open(zdir, db);
 
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open zkc database: %s\n", sqlite3_errmsg(*db));
@@ -139,8 +140,9 @@ create_tables(sqlite3 *db)
 		");";
 
 	int rc = sql_exec(db, create_notes);
-	if (rc != SQLITE_OK)
+	if (rc != SQLITE_OK) {
 		return rc;
+	}
 
 	const char *create_tags = "CREATE TABLE IF NOT EXISTS tags("
 		"id INTEGER PRIMARY KEY, "
@@ -148,8 +150,9 @@ create_tables(sqlite3 *db)
 		");";
 
 	rc = sql_exec(db, create_tags);
-	if (rc != SQLITE_OK)
+	if (rc != SQLITE_OK) {
 		return rc;
+	}
 
 	const char *create_note_tags = "CREATE TABLE IF NOT EXISTS note_tags("
 		"id INTEGER PRIMARY KEY, "
@@ -170,8 +173,9 @@ create_tables(sqlite3 *db)
 		");";
 
 	rc = sql_exec(db, create_inbox);
-	if (rc != SQLITE_OK)
+	if (rc != SQLITE_OK) {
 		return rc;
+	}
 
 	const char *create_links = "CREATE TABLE IF NOT EXISTS links("
 		"id INTEGER PRIMARY KEY, "
@@ -182,8 +186,9 @@ create_tables(sqlite3 *db)
 		");";
 
 	rc = sql_exec(db, create_links);
-	if (rc != SQLITE_OK)
+	if (rc != SQLITE_OK) {
 		return rc;
+	}
 
 	return SQLITE_OK;
 }
@@ -195,33 +200,35 @@ new(sqlite3 *db)
 	uuid_v4_gen(uuid);
 
 	char zdir[200];
-        char* homedir = getenv("HOME");
-        if (homedir == NULL)
-                homedir = getpwuid(getuid())->pw_dir;
+  char* homedir = getenv("HOME");
+  if (homedir == NULL) {
+  	homedir = getpwuid(getuid())->pw_dir;
+	}
 
-        strcpy(zdir, homedir);
-        strcat(zdir, "/.zettelkasten/");
+  strcpy(zdir, homedir);
+  strcat(zdir, "/.zettelkasten/");
 	strcat(zdir, uuid);
 
 	char command[300];
 	if (getenv("ZKC_EDITOR") != NULL) {
 		sprintf(command, "$ZKC_EDITOR %s", zdir);
 	} else if (getenv("EDITOR") != NULL) {
-	        sprintf(command, "$EDITOR %s", zdir);
+	  sprintf(command, "$EDITOR %s", zdir);
 	} else if (getenv("VISUAL") != NULL) {
-	        sprintf(command, "$VISUAL %s", zdir);
+	  sprintf(command, "$VISUAL %s", zdir);
 	} else {
-	        sprintf(command, "vi %s", zdir);
+	  sprintf(command, "vi %s", zdir);
 	}
 
 	if (system(command) != 0) {
-	        fprintf(stderr, "Unable to open note with editor!\n");
-	        return 1;
+		fprintf(stderr, "Unable to open note with editor!\n");
+	  return 1;
 	}
 
 	FILE *f = fopen(zdir, "rb");
-	if (!f)
+	if (!f) {
 		return 0;
+	}
 
 	// TODO: Add error check
 	fseek(f, 0, SEEK_END);
@@ -229,8 +236,9 @@ new(sqlite3 *db)
 	fseek(f, 0, SEEK_SET);
 	char *buffer = (char*)malloc(sizeof(char)*length);
 
-	if (buffer)
+	if (buffer) {
 		fread(buffer, sizeof(char), length, f);
+	}
 
 	fclose(f);
 	remove(zdir);
@@ -289,10 +297,32 @@ new(sqlite3 *db)
 	sqlite3_finalize(stmt);
 
 end:
-	if (buffer != NULL)
+	if (buffer != NULL) {
 		free(buffer);
+	}
 
 	return rc;
+}
+
+static int
+note_summary_callback(void *not_used, int argc, char **argv, char **col_names)
+{
+	char *uuid = argv[0];
+	char *date = argv[1];
+	char *body = argv[2];
+
+	if (strlen(body) > 16) {
+		body[16] = '\0';
+	}
+
+	// Replace newlines with spaces
+	for (size_t i = 0; i < 16; i++)
+		if (body[i] == '\n')
+			body[i] = ' ';
+
+	// Total width will be 80 chars
+	printf("%s - %s - %s...\n", uuid, date, body);
+	return 0;
 }
 
 int
@@ -332,26 +362,6 @@ inbox(sqlite3 *db, int head)
 	}
 
 	return rc;
-}
-
-int
-note_summary_callback(void *not_used, int argc, char **argv, char **col_names)
-{
-	char *uuid = argv[0];
-	char *date = argv[1];
-	char *body = argv[2];
-
-	if (strlen(body) > 16)
-		body[16] = '\0';
-
-	// Replace newlines with spaces
-	for (size_t i = 0; i < 16; i++)
-		if (body[i] == '\n')
-			body[i] = ' ';
-
-	// Total width will be 80 chars
-	printf("%s - %s - %s...\n", uuid, date, body);
-	return 0;
 }
 
 int
@@ -440,12 +450,13 @@ edit(sqlite3 *db, const char *uuid)
 	}
 
 	char zdir[200];
-        char* homedir = getenv("HOME");
-        if (homedir == NULL)
-                homedir = getpwuid(getuid())->pw_dir;
+  char* homedir = getenv("HOME");
+  if (homedir == NULL) {
+  	homedir = getpwuid(getuid())->pw_dir;
+	}
 
-        strcpy(zdir, homedir);
-        strcat(zdir, "/.zettelkasten/");
+  strcpy(zdir, homedir);
+  strcat(zdir, "/.zettelkasten/");
 	strcat(zdir, uuid);
 
 	FILE *fw = fopen(zdir, "wb");
@@ -460,21 +471,21 @@ edit(sqlite3 *db, const char *uuid)
 	if (getenv("ZKC_EDITOR") != NULL) {
 		sprintf(command, "$ZKC_EDITOR %s", zdir);
 	} else if (getenv("EDITOR") != NULL) {
-	        sprintf(command, "$EDITOR %s", zdir);
+	  sprintf(command, "$EDITOR %s", zdir);
 	} else if (getenv("VISUAL") != NULL) {
-	        sprintf(command, "$VISUAL %s", zdir);
+	  sprintf(command, "$VISUAL %s", zdir);
 	} else {
-	        sprintf(command, "vi %s", zdir);
+	  sprintf(command, "vi %s", zdir);
 	}
 
 	if (system(command) != 0) {
-	        fprintf(stderr, "Unable to open note with editor!\n");
-	        return 1;
+		fprintf(stderr, "Unable to open note with editor!\n");
+	  return 1;
 	}
 
 	FILE *fr = fopen(zdir, "rb");
 	if (!fr) {
-	        fprintf(stderr, "Unable to open temp file %s after edit!\n", zdir);
+	  fprintf(stderr, "Unable to open temp file %s after edit!\n", zdir);
 		return 1;
 	}
 
@@ -484,8 +495,9 @@ edit(sqlite3 *db, const char *uuid)
 	fseek(fr, 0, SEEK_SET);
 	char *buffer = (char*)malloc(sizeof(char) * length);
 
-	if (buffer)
+	if (buffer) {
 		fread(buffer, sizeof(char), length, fr);
+	}
 
 	fclose(fr);
 	remove(zdir);
@@ -542,8 +554,9 @@ edit(sqlite3 *db, const char *uuid)
 	}
 
 end:
-	if (buffer != NULL)
+	if (buffer != NULL) {
 		free(buffer);
+	}
 
 	return rc;
 }
@@ -563,8 +576,9 @@ slurp(sqlite3 *db, const char *path)
 	fseek(f, 0, SEEK_SET);
 	char *buffer = (char*)malloc(sizeof(char)*length);
 
-	if (buffer)
+	if (buffer) {
 		fread(buffer, sizeof(char), length, f);
+	}
 
 	fclose(f);
 
@@ -626,8 +640,9 @@ slurp(sqlite3 *db, const char *path)
 	sqlite3_finalize(stmt);
 
 end:
-	if (buffer != NULL)
+	if (buffer != NULL) {
 		free(buffer);
+	}
 
 	return rc;
 }
@@ -721,8 +736,9 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
 
 		rc = sqlite3_step(stmt);
 
-		if (rc == SQLITE_DONE)
+		if (rc == SQLITE_DONE) {
 			break;
+		}
 
 		if (rc != SQLITE_ROW) {
 			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
@@ -733,15 +749,18 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
 		char *date = (char *)sqlite3_column_text(stmt, 1);
 		char *body = (char *)sqlite3_column_text(stmt, 2);
 
-		if (strlen(body) > 16)
+		if (strlen(body) > 16) {
 			body[16] = '\0';
+		}
 
-                // Replace newlines with spaces
-		for (size_t i = 0; i < 16; i++)
-			if (body[i] == '\n')
+    // Replace newlines with spaces
+		for (size_t i = 0; i < 16; i++) {
+			if (body[i] == '\n') {
 				body[i] = ' ';
+			}
+		}
 
-                // Total width will be 80 chars
+		// Total width will be 80 chars
 		printf("%s - %s - %s...\n", uuid, date, body);
 
 	}
@@ -933,8 +952,9 @@ links(sqlite3 *db, const char *uuid)
 
 		rc = sqlite3_step(stmt);
 
-		if (rc == SQLITE_DONE)
+		if (rc == SQLITE_DONE) {
 			break;
+		}
 
 		if (rc != SQLITE_ROW) {
 			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
@@ -945,15 +965,18 @@ links(sqlite3 *db, const char *uuid)
 		char *date = (char *)sqlite3_column_text(stmt, 1);
 		char *body = (char *)sqlite3_column_text(stmt, 2);
 
-		if (strlen(body) > 16)
+		if (strlen(body) > 16) {
 			body[16] = '\0';
+		}
 
-                // Replace newlines with spaces
-		for (size_t i = 0; i < 16; i++)
-			if (body[i] == '\n')
+    // Replace newlines with spaces
+		for (size_t i = 0; i < 16; i++) {
+			if (body[i] == '\n') {
 				body[i] = ' ';
+			}
+		}
 
-                // Total width will be 80 chars
+    // Total width will be 80 chars
 		printf("%s - %s - %s...\n", uuid, date, body);
 
 	}
@@ -1019,8 +1042,9 @@ links(sqlite3 *db, const char *uuid)
 
 		rc = sqlite3_step(stmt2);
 
-		if (rc == SQLITE_DONE)
+		if (rc == SQLITE_DONE) {
 			break;
+		}
 
 		if (rc != SQLITE_ROW) {
 			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
@@ -1031,17 +1055,19 @@ links(sqlite3 *db, const char *uuid)
 		char *date = (char *)sqlite3_column_text(stmt2, 1);
 		char *body = (char *)sqlite3_column_text(stmt2, 2);
 
-		if (strlen(body) > 16)
+		if (strlen(body) > 16) {
 			body[16] = '\0';
+		}
 
-                // Replace newlines with spaces
-		for (size_t i = 0; i < 16; i++)
-			if (body[i] == '\n')
+    // Replace newlines with spaces
+		for (size_t i = 0; i < 16; i++) {
+			if (body[i] == '\n') {
 				body[i] = ' ';
+			}
+		}
 
-                // Total width will be 80 chars
+    // Total width will be 80 chars
 		printf("%s - %s - %s...\n", uuid, date, body);
-
 	}
 
 	sqlite3_finalize(stmt2);
@@ -1233,8 +1259,9 @@ tags(sqlite3 *db, const char *uuid)
 
 		rc = sqlite3_step(stmt);
 
-		if (rc == SQLITE_DONE)
+		if (rc == SQLITE_DONE) {
 			break;
+		}
 
 		if (rc != SQLITE_ROW) {
 			fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
@@ -1474,7 +1501,6 @@ archive(sqlite3 *db, const char *uuid)
 			"ON note_id = notes.id "
 			"ORDER BY notes.date DESC LIMIT 1)";
 	} else if (!strcmp(uuid, "tail")) {
-
 		sql = "DELETE FROM inbox WHERE note_id = "
 			"(SELECT note_id FROM inbox "
 			"INNER JOIN notes "
@@ -1840,6 +1866,7 @@ merge_note_tags_callback(void *data, int argc, char **argv, char **col_names)
 		"INNER JOIN notes ON note_tags.note_id "
 		"INNER JOIN tags ON note_tags.tag_id "
 		"WHERE notes.uuid = ? AND tags.body = ?;";
+
 	sqlite3_stmt *stmt;
 	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 	if (rc != SQLITE_OK) {

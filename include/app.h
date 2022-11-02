@@ -20,9 +20,6 @@ int
 inbox(sqlite3 *db, int head);
 
 int
-note_summary_callback(void *not_used, int argc, char **argv, char **col_names);
-
-int
 view(sqlite3 *db, const char *uuid);
 
 int
