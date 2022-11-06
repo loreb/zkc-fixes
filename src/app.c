@@ -1283,26 +1283,28 @@ int
 delete_note(sqlite3 *db, const char *uuid)
 {
 	char *sql;
+        int rc = SQLITE_OK;
+
 	if (!strcmp(uuid, "head")) {
-		sql = "DELETE FROM notes WHERE id = "
+		sql = "DELETE FROM inbox WHERE note_id = "
 			"(SELECT notes.id FROM notes "
 			"INNER JOIN inbox "
 			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date DESC "
 			"LIMIT 1);";
 	} else if (!strcmp(uuid, "tail")) {
-		sql = "DELETE FROM notes WHERE id = "
+		sql = "DELETE FROM inbox WHERE note_id = "
 			"(SELECT notes.id FROM notes "
 			"INNER JOIN inbox "
 			"ON notes.id = inbox.note_id "
 			"ORDER BY notes.date ASC "
 			"LIMIT 1);";
 	} else {
-		sql = "DELETE FROM notes WHERE uuid = ?;";
+		sql = "DELETE FROM inbox WHERE note_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
 	}
 
 	sqlite3_stmt *stmt;
-	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 	if (rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
 		return rc;
@@ -1319,7 +1321,46 @@ delete_note(sqlite3 *db, const char *uuid)
 		return rc;
 	}
 
-	sqlite3_finalize(stmt);
+	sqlite3_finalize(stmt);        
+
+        char *sql2;
+	if (!strcmp(uuid, "head")) {
+		sql2 = "DELETE FROM notes WHERE id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date DESC "
+			"LIMIT 1);";
+	} else if (!strcmp(uuid, "tail")) {
+		sql2 = "DELETE FROM notes WHERE id = "
+			"(SELECT notes.id FROM notes "
+			"INNER JOIN inbox "
+			"ON notes.id = inbox.note_id "
+			"ORDER BY notes.date ASC "
+			"LIMIT 1);";
+	} else {
+		sql2 = "DELETE FROM notes WHERE uuid = ?;";
+	}
+
+	sqlite3_stmt *stmt2;
+	rc = sqlite3_prepare_v2(db, sql2, -1, &stmt2, 0);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
+		sqlite3_bind_text(stmt2, 1, uuid, strlen(uuid), SQLITE_STATIC);
+	}
+
+	rc = sqlite3_step(stmt2);
+
+	if (rc != SQLITE_DONE) {
+		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+		return rc;
+	}
+
+	sqlite3_finalize(stmt2);
 
 	return rc;
 }
