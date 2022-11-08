@@ -84,39 +84,6 @@ help(void)
 }
 
 int
-open_db(sqlite3 **db)
-{
-	char zdir[200];
-  char* homedir = getenv("HOME");
-  if (homedir == NULL) {
-  	homedir = getpwuid(getuid())->pw_dir;
-	}
-
-  strcpy(zdir, homedir);
-  strcat(zdir, "/.zettelkasten/");
-
-  DIR* dr = opendir(zdir);
-  if (dr == NULL) {
-  	int result = mkdir(zdir, 0777);
-    if (result != 0) {
-    	printf("Failed to create zettelkasten directory\n");
-      return 1;
-    } else {
-      printf("Initialized zettelkasten directory in $HOME\n");
-    }
-  }
-
-  strcat(zdir, "zkc.db");
-  int rc = sqlite3_open(zdir, db);
-
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Cannot open zkc database: %s\n", sqlite3_errmsg(*db));
-	}
-
-	return rc;
-}
-
-int
 sql_exec(sqlite3 *db, const char *sql)
 {
 	char *err_msg = 0;
@@ -131,12 +98,47 @@ sql_exec(sqlite3 *db, const char *sql)
 }
 
 int
+open_db(sqlite3 **db)
+{
+        char zdir[200];
+        char* homedir = getenv("HOME");
+        if (homedir == NULL) {
+                homedir = getpwuid(getuid())->pw_dir;
+        }
+
+        strcpy(zdir, homedir);
+        strcat(zdir, "/.zettelkasten/");
+
+        DIR* dr = opendir(zdir);
+        if (dr == NULL) {
+                int result = mkdir(zdir, 0777);
+                if (result != 0) {
+                        printf("Failed to create zettelkasten directory\n");
+                        return 1;
+                } else {
+                        printf("Initialized zettelkasten directory in $HOME\n");
+                }
+        }
+
+        strcat(zdir, "zkc.db");
+        int rc = sqlite3_open(zdir, db);
+
+        if (rc != SQLITE_OK) {
+                fprintf(stderr, "Cannot open zkc database: %s\n", sqlite3_errmsg(*db));
+        }
+
+        rc = sql_exec(*db, "PRAGMA foreign_keys=ON");
+
+        return rc;
+}
+
+int
 create_tables(sqlite3 *db)
 {
 	const char *create_notes = "CREATE TABLE IF NOT EXISTS notes("
 		"id INTEGER PRIMARY KEY, "
 		"uuid VARCHAR(36) NOT NULL, "
-    "body TEXT NOT NULL, "
+                "body TEXT NOT NULL, "
 		"hash TEXT NOT NULL, "
 		"date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
 		");";
@@ -1282,46 +1284,7 @@ tags(sqlite3 *db, const char *uuid)
 int
 delete_note(sqlite3 *db, const char *uuid)
 {
-	char *sql;
         int rc = SQLITE_OK;
-
-	if (!strcmp(uuid, "head")) {
-		sql = "DELETE FROM inbox WHERE note_id = "
-			"(SELECT notes.id FROM notes "
-			"INNER JOIN inbox "
-			"ON notes.id = inbox.note_id "
-			"ORDER BY notes.date DESC "
-			"LIMIT 1);";
-	} else if (!strcmp(uuid, "tail")) {
-		sql = "DELETE FROM inbox WHERE note_id = "
-			"(SELECT notes.id FROM notes "
-			"INNER JOIN inbox "
-			"ON notes.id = inbox.note_id "
-			"ORDER BY notes.date ASC "
-			"LIMIT 1);";
-	} else {
-		sql = "DELETE FROM inbox WHERE note_id = (SELECT id FROM notes WHERE uuid = ? LIMIT 1);";
-	}
-
-	sqlite3_stmt *stmt;
-	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
-		return rc;
-	}
-
-	if (strcmp(uuid, "head") && strcmp(uuid, "tail")) {
-		sqlite3_bind_text(stmt, 1, uuid, strlen(uuid), SQLITE_STATIC);
-	}
-
-	rc = sqlite3_step(stmt);
-
-	if (rc != SQLITE_DONE) {
-		fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
-		return rc;
-	}
-
-	sqlite3_finalize(stmt);        
 
         char *sql2;
 	if (!strcmp(uuid, "head")) {
