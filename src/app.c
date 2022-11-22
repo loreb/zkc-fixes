@@ -225,7 +225,7 @@ new(sqlite3 *db)
         }
 
         strcpy(zdir, homedir);
-        strcat(zdir, "/.zettelkasten/");
+        strcat(zdir, "/.local/zkc/");
         strcat(zdir, uuid);
 
         char command[300];
@@ -475,7 +475,7 @@ edit(sqlite3 *db, const char *uuid)
         }
 
         strcpy(zdir, homedir);
-        strcat(zdir, "/.zettelkasten/");
+        strcat(zdir, "/.local/zkc/");
         strcat(zdir, uuid);
 
         FILE *fw = fopen(zdir, "wb");
