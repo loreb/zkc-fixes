@@ -121,6 +121,24 @@ The recommended workaround is after a delete, one should overwrite all copies of
 with that version. This is a downside of the simple merging strategy. The tradeoff being made
 to prioritize not accidentally deleting data.
 
+## Remote Backups
+
+Remote backups can be acheived easily with a few shell scripts and ssh.
+
+Here is a script to push the local copy of the database:
+
+    #! /bin/sh
+
+    scp ~/.local/zkc/zkc.db foo@example.com:~
+
+Here is a script to pull a remote copy locally:
+
+    #! /bin/sh
+
+    scp foo@example.com:~/zkc.db zkc.db
+
+The idea is that you pull a remote copy locally, but don't overwrite your local copy. To get updates from remote run the merge command.
+
 # License
 
 GPLv3
