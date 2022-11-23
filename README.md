@@ -36,23 +36,23 @@ The key idea is that the Zettelkasten method is more than a note taking system. 
 
 ## How?
 
-zkc stores notes, tags, and links in a sqlite database stored at ~HOME/.zettelkasten/zkc.db.
+zkc stores notes, tags, and links in a sqlite database stored at ~HOME/.local/zkc/zkc.db.
 
 ## Workflow
 
 The recommended workflow is to create a note. All new notes are added to the inbox. The most recent note
 in the inbox can be referenced as "head". The oldest note in the inbox can be referenced as "tail".
 
-Ex:
+Example:
 
     zkc view head
 
 The point is to be able to save notes as inspiration strikes. Then you can later go through
 the inbox to either tag, link, or delete a note. Once you are happy, you can archive the note
 and move it out of the inbox. While order isn't necessary, working on the head or tail note is the
-most convenient. This way you don't have to copy and paste uuid's constantly.
+most convenient. Using the keywords prevents you from having to copy and paste uuid's constantly.
 
-## Example Workflow
+### Example Workflow
 
     zkc init
     zkc new
@@ -70,7 +70,7 @@ Once notes are moved out of the inbox and into the archive you'll still be able 
 
 This will return all the notes that have the word "foobar".
 
-There are two types of searches text matching and tag matching. The default is text as seen above.
+There are two types of searches: text matching and tag matching. The default is text as seen above.
 Which is equivalent to:
 
     zkc search text foobar
@@ -96,7 +96,7 @@ and the system would sync the different files together.
 
 In order to work around this problem, I implemented a very basic merging and 
 diff strategy. All notes have an associated hash of the note body. The merging
-algorithm will check if a uuid exists in both databases, if it doesn't exist 
+algorithm will check if a uuid exists in both databases. If it doesn't exist 
 in both, it will add it to the database that is being merged into. Merges are 
 not bidirectional. If the uuid exists in both databases, it will check the hash. 
 If the hash is different, it will then check if the timestamp is greater. If the
@@ -107,7 +107,7 @@ existing note unchanged.
 The workflow when merging looks like this:
 
     zkc diff other_zkc.db
-        
+
 The diff command will display any mergeable differences with other_zkc.db.
 If there are mergeable differences you can then run the merge command:
 
@@ -137,7 +137,7 @@ Here is a script to pull a remote copy locally:
 
     scp foo@example.com:~/zkc.db zkc.db
 
-The idea is that you pull a remote copy locally, but don't overwrite your local copy. To get updates from remote run the merge command.
+The idea is that you pull a remote copy locally, but don't overwrite your local copy. To get updates from remote, run the merge command.
 
 # License
 
