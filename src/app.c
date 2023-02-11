@@ -6,6 +6,7 @@
 #include <pwd.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <openssl/err.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include "app.h"
@@ -22,7 +23,7 @@ sha256_string(const char *s, char output_buffer[65])
 }
 
 // Taken from: https://gist.github.com/kvelakur/9069c9896577c3040030
-static int
+static void
 uuid_v4_gen(char *buffer)
 {
         union
@@ -40,6 +41,12 @@ uuid_v4_gen(char *buffer)
         } uuid;
 
         int rc = RAND_bytes(uuid.__rnd, sizeof(uuid));
+        if (rc != 1) {
+                char buf[321]; // must be >= 256
+                ERR_error_string_n(ERR_get_error(), buf, sizeof buf);
+                fprintf(stderr, "zkc: uuid_v4_gen: %s\n", buf);
+                exit(1);
+        }
 
         // Refer Section 4.2 of RFC-4122
         // https://tools.ietf.org/html/rfc4122#section-4.2
@@ -52,7 +59,7 @@ uuid_v4_gen(char *buffer)
                  uuid.node[0], uuid.node[1], uuid.node[2],
                  uuid.node[3], uuid.node[4], uuid.node[5]);
 
-        return rc;
+        return;
 }
 
 void
