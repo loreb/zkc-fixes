@@ -212,6 +212,40 @@ create_tables(sqlite3 *db)
         return SQLITE_OK;
 }
 
+static char *read_c_string(FILE *f)
+{
+        if (fseek(f, 0, SEEK_END) < 0) {
+                perror("SEEK_END");
+                return NULL;
+        }
+        const long size = ftell(f);
+        if (size < 0) {
+                perror("ftell");
+                return NULL;
+        }
+        if (fseek(f, 0, SEEK_SET) < 0) {
+                perror("SEEK_SET");
+                return NULL;
+        }
+        char *buf = malloc(size+1);
+        if (!buf) {
+                perror("malloc");
+                return NULL;
+        }
+        if ((size_t)size != fread(buf, 1, size+1, f)) {
+                perror("fread");
+                free(buf);
+                return NULL;
+        }
+        if (memchr(buf, '\0', size)) {
+                fprintf(stderr, "stray '\\0'\n");
+                free(buf);
+                return NULL;
+        }
+        buf[size] = '\0';
+        return buf;
+}
+
 int
 new(sqlite3 *db)
 {
@@ -246,19 +280,13 @@ new(sqlite3 *db)
 
         FILE *f = fopen(zdir, "rb");
         if (!f) {
-                return 0;
+                return 1;
         }
 
-        // TODO: Add error check
-        fseek(f, 0, SEEK_END);
-        long length = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        char *buffer = (char*)malloc(sizeof(char)*length);
+        char *buffer = read_c_string(f);
 
-        if (buffer) {
-                fread(buffer, sizeof(char), length, f);
-        }
-
+        if (!buffer)
+                return 1;
         fclose(f);
         remove(zdir);
 
@@ -312,6 +340,7 @@ new(sqlite3 *db)
                 fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
                 goto end;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt);
 
@@ -508,14 +537,10 @@ edit(sqlite3 *db, const char *uuid)
                 return 1;
         }
 
-        // TODO: Add error check
-        fseek(fr, 0, SEEK_END);
-        long length = ftell(fr);
-        fseek(fr, 0, SEEK_SET);
-        char *buffer = (char*)malloc(sizeof(char) * length);
+        char *buffer = read_c_string(fr);
 
-        if (buffer) {
-                fread(buffer, sizeof(char), length, fr);
+        if (!buffer) {
+                return 1;
         }
 
         fclose(fr);
@@ -590,14 +615,10 @@ slurp(sqlite3 *db, const char *path)
                 return 1;
         }
 
-        // TODO: Add error check
-        fseek(f, 0, SEEK_END);
-        long length = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        char *buffer = (char*)malloc(sizeof(char)*length);
+        char *buffer = read_c_string(f);
 
-        if (buffer) {
-                fread(buffer, sizeof(char), length, f);
+        if (!buffer) {
+                return 1;
         }
 
         fclose(f);
