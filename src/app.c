@@ -568,6 +568,7 @@ edit(sqlite3 *db, const char *uuid)
                         fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
                         goto end;
                 }
+                rc = 0;
 
                 sqlite3_finalize(stmt);
         }
@@ -655,6 +656,7 @@ slurp(sqlite3 *db, const char *path)
                 fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
                 goto end;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt);
 
@@ -904,6 +906,7 @@ link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
                 fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt);
 
@@ -1190,6 +1193,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
                 fprintf(stderr, "INSERT NOTE TAG - execution failed: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt3);
 
@@ -1279,6 +1283,7 @@ tags(sqlite3 *db, const char *uuid)
                 rc = sqlite3_step(stmt);
 
                 if (rc == SQLITE_DONE) {
+                        rc = 0;
                         break;
                 }
 
@@ -1337,6 +1342,7 @@ delete_note(sqlite3 *db, const char *uuid)
                 fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt2);
 
@@ -1363,6 +1369,7 @@ delete_tag(sqlite3 *db, const char *tag_body)
                 fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt);
 
@@ -1429,6 +1436,7 @@ delete_note_tag(sqlite3 *db, const char *uuid, const char *tag_body)
                 fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt);
 
@@ -1504,6 +1512,7 @@ delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
                 fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt);
 
@@ -1548,6 +1557,7 @@ archive(sqlite3 *db, const char *uuid)
                 fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
+        rc = 0;
 
         sqlite3_finalize(stmt);
 
