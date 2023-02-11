@@ -43,7 +43,8 @@ main(int argc, char **argv)
 			if (rc != SQLITE_OK)
 				goto end;
 		} else {
-			printf("Invalid command or missing arguments: %s\n", argv[1]);
+			fprintf(stderr, "Invalid command or missing arguments: %s\n", argv[1]);
+			goto end;
 		}
 	} else if (argc == 3) {
 		if (!strcmp(argv[1], "view")) {
@@ -87,7 +88,8 @@ main(int argc, char **argv)
 			if (rc != SQLITE_OK)
 			  goto end;
 		} else {
-			printf("Invalid command: %s\n", argv[1]);
+			fprintf(stderr, "Invalid command: %s\n", argv[1]);
+			goto end;
 		}
 	} else if (argc == 4) {
 		if (!strcmp(argv[1], "spit")) {
@@ -116,10 +118,12 @@ main(int argc, char **argv)
 				if (rc != SQLITE_OK)
 					goto end;
 			} else {
-				printf("Invalid delete type: %s\n", argv[2]);
+				fprintf(stderr, "Invalid delete type: %s\n", argv[2]);
+				goto end;
 			}
 		} else {
-			printf("Invalid command: %s\n", argv[1]);
+			fprintf(stderr, "Invalid command: %s\n", argv[1]);
+			goto end;
 		}
 	} else if (argc == 5) {
 		if (!strcmp(argv[1], "delete")) {
@@ -132,10 +136,12 @@ main(int argc, char **argv)
 				if (rc != SQLITE_OK)
 					goto end;
 			} else {
-				printf("Invalid delete type: %s\n", argv[2]);
+				fprintf(stderr, "Invalid delete type: %s\n", argv[2]);
+				goto end;
 			}
 		} else {
-			printf("Invalid command: %s\n", argv[1]);			
+			fprintf(stderr, "Invalid command: %s\n", argv[1]);			
+			goto end;
 		}
 	} else {
 		help();

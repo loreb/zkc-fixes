@@ -120,7 +120,7 @@ open_db(sqlite3 **db)
         if (dr == NULL) {
                 int result = mkdir(zdir, 0777);
                 if (result != 0) {
-                        printf("Failed to create $HOME/.local/ directory.\n");
+                        fprintf(stderr, "Failed to create $HOME/.local/ directory.\n");
                         return 1;
                 }
         } else {
@@ -133,10 +133,10 @@ open_db(sqlite3 **db)
         if (zdr == NULL) {
                 int result = mkdir(zdir, 0777);
                 if (result != 0) {
-                        printf("Failed to create $HOME/.local/zkc/ directory.\n");
+                        fprintf(stderr, "Failed to create $HOME/.local/zkc/ directory.\n");
                         return 1;
                 } else {
-                        printf("Created $HOME/.local/zkc/ directory.\n");
+                        fprintf(stderr, "Created $HOME/.local/zkc/ directory.\n");
                 }
         } else {
                 closedir(zdr);
