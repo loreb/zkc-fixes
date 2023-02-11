@@ -67,4 +67,7 @@ diff(sqlite3 *db, const char *path);
 int
 merge(sqlite3 *db, const char *path);
 
+// Keep as a macro to get compiler warnings!
+#define zprintf(...) fprintf(stderr, "zkc: " __VA_ARGS__)
+
 #endif

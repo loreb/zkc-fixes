@@ -43,7 +43,7 @@ main(int argc, char **argv)
 			if (rc != SQLITE_OK)
 				goto end;
 		} else {
-			fprintf(stderr, "Invalid command or missing arguments: %s\n", argv[1]);
+			zprintf("Invalid command or missing arguments: %s\n", argv[1]);
 			goto end;
 		}
 	} else if (argc == 3) {
@@ -88,7 +88,7 @@ main(int argc, char **argv)
 			if (rc != SQLITE_OK)
 			  goto end;
 		} else {
-			fprintf(stderr, "Invalid command: %s\n", argv[1]);
+			zprintf("Invalid command: %s\n", argv[1]);
 			goto end;
 		}
 	} else if (argc == 4) {
@@ -118,11 +118,11 @@ main(int argc, char **argv)
 				if (rc != SQLITE_OK)
 					goto end;
 			} else {
-				fprintf(stderr, "Invalid delete type: %s\n", argv[2]);
+				zprintf("Invalid delete type: %s\n", argv[2]);
 				goto end;
 			}
 		} else {
-			fprintf(stderr, "Invalid command: %s\n", argv[1]);
+			zprintf("Invalid command: %s\n", argv[1]);
 			goto end;
 		}
 	} else if (argc == 5) {
@@ -136,11 +136,11 @@ main(int argc, char **argv)
 				if (rc != SQLITE_OK)
 					goto end;
 			} else {
-				fprintf(stderr, "Invalid delete type: %s\n", argv[2]);
+				zprintf("Invalid delete type: %s\n", argv[2]);
 				goto end;
 			}
 		} else {
-			fprintf(stderr, "Invalid command: %s\n", argv[1]);			
+			zprintf("Invalid command: %s\n", argv[1]);			
 			goto end;
 		}
 	} else {

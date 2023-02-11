@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <errno.h>
 #include <pwd.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -20,6 +21,12 @@ sha256_string(const char *s, char output_buffer[65])
                 sprintf(output_buffer + (i * 2), "%02x", hash[i]);
         }
         output_buffer[64] = '\0';
+}
+
+static void
+zerror(const char *s)
+{
+        fprintf(stderr, "zkc: %s: %s\n", s, strerror(errno));
 }
 
 // Taken from: https://gist.github.com/kvelakur/9069c9896577c3040030
@@ -44,7 +51,7 @@ uuid_v4_gen(char *buffer)
         if (rc != 1) {
                 char buf[321]; // must be >= 256
                 ERR_error_string_n(ERR_get_error(), buf, sizeof buf);
-                fprintf(stderr, "zkc: uuid_v4_gen: %s\n", buf);
+                zprintf("uuid_v4_gen: %s\n", buf);
                 exit(1);
         }
 
@@ -97,7 +104,7 @@ sql_exec(sqlite3 *db, const char *sql)
         int rc = sqlite3_exec(db, sql, 0, 0, &err_msg);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -120,7 +127,7 @@ open_db(sqlite3 **db)
         if (dr == NULL) {
                 int result = mkdir(zdir, 0777);
                 if (result != 0) {
-                        fprintf(stderr, "Failed to create $HOME/.local/ directory.\n");
+                        zprintf("Failed to create $HOME/.local/ directory.\n");
                         return 1;
                 }
         } else {
@@ -133,10 +140,10 @@ open_db(sqlite3 **db)
         if (zdr == NULL) {
                 int result = mkdir(zdir, 0777);
                 if (result != 0) {
-                        fprintf(stderr, "Failed to create $HOME/.local/zkc/ directory.\n");
+                        zprintf("Failed to create $HOME/.local/zkc/ directory.\n");
                         return 1;
                 } else {
-                        fprintf(stderr, "Created $HOME/.local/zkc/ directory.\n");
+                        zprintf("Created $HOME/.local/zkc/ directory.\n");
                 }
         } else {
                 closedir(zdr);
@@ -146,7 +153,7 @@ open_db(sqlite3 **db)
         int rc = sqlite3_open(zdir, db);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot open zkc database: %s\n", sqlite3_errmsg(*db));
+                zprintf("Cannot open zkc database: %s\n", sqlite3_errmsg(*db));
         }
 
         rc = sql_exec(*db, "PRAGMA foreign_keys=ON");
@@ -222,30 +229,30 @@ create_tables(sqlite3 *db)
 static char *read_c_string(FILE *f)
 {
         if (fseek(f, 0, SEEK_END) < 0) {
-                perror("SEEK_END");
+                zerror("SEEK_END");
                 return NULL;
         }
         const long size = ftell(f);
         if (size < 0) {
-                perror("ftell");
+                zerror("ftell");
                 return NULL;
         }
         if (fseek(f, 0, SEEK_SET) < 0) {
-                perror("SEEK_SET");
+                zerror("SEEK_SET");
                 return NULL;
         }
         char *buf = malloc(size+1);
         if (!buf) {
-                perror("malloc");
+                zerror("malloc");
                 return NULL;
         }
         if ((size_t)size != fread(buf, 1, size+1, f)) {
-                perror("fread");
+                zerror("fread");
                 free(buf);
                 return NULL;
         }
         if (memchr(buf, '\0', size)) {
-                fprintf(stderr, "stray '\\0'\n");
+                zprintf("stray '\\0'\n");
                 free(buf);
                 return NULL;
         }
@@ -281,7 +288,7 @@ new(sqlite3 *db)
         }
 
         if (system(command) != 0) {
-                fprintf(stderr, "Unable to open note with editor!\n");
+                zprintf("Unable to open note with editor!\n");
                 return 1;
         }
 
@@ -305,7 +312,7 @@ new(sqlite3 *db)
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         goto end;
                 }
 
@@ -319,7 +326,7 @@ new(sqlite3 *db)
                 rc = sqlite3_step(stmt);
 
                 if (rc != SQLITE_DONE) {
-                        fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s", sqlite3_errmsg(db));
                         goto end;
                 }
 
@@ -335,7 +342,7 @@ new(sqlite3 *db)
         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 goto end;
         }
 
@@ -344,7 +351,7 @@ new(sqlite3 *db)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                zprintf("execution failed: %s", sqlite3_errmsg(db));
                 goto end;
         }
         rc = 0;
@@ -411,8 +418,8 @@ inbox(sqlite3 *db, int head)
         rc = sqlite3_exec(db, sql, note_summary_callback, 0, &err_msg);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to query inbox\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to query inbox\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -444,7 +451,7 @@ view(sqlite3 *db, const char *uuid)
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -455,7 +462,7 @@ view(sqlite3 *db, const char *uuid)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_ROW) {
-                fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -489,7 +496,7 @@ edit(sqlite3 *db, const char *uuid)
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -500,7 +507,7 @@ edit(sqlite3 *db, const char *uuid)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_ROW) {
-                fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -534,13 +541,13 @@ edit(sqlite3 *db, const char *uuid)
         }
 
         if (system(command) != 0) {
-                fprintf(stderr, "Unable to open note with editor!\n");
+                zprintf("Unable to open note with editor!\n");
                 return 1;
         }
 
         FILE *fr = fopen(zdir, "rb");
         if (!fr) {
-                fprintf(stderr, "Unable to open temp file %s after edit!\n", zdir);
+                zprintf("Unable to open temp file %s after edit!\n", zdir);
                 return 1;
         }
 
@@ -580,7 +587,7 @@ edit(sqlite3 *db, const char *uuid)
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         goto end;
                 }
 
@@ -597,7 +604,7 @@ edit(sqlite3 *db, const char *uuid)
                 rc = sqlite3_step(stmt);
 
                 if (rc != SQLITE_DONE) {
-                        fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s", sqlite3_errmsg(db));
                         goto end;
                 }
                 rc = 0;
@@ -618,7 +625,7 @@ slurp(sqlite3 *db, const char *path)
 {
         FILE *f = fopen(path, "rb");
         if (!f) {
-                fprintf(stderr, "No file found at: %s\n", path);
+                zprintf("No file found at: %s\n", path);
                 return 1;
         }
 
@@ -638,7 +645,7 @@ slurp(sqlite3 *db, const char *path)
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         goto end;
                 }
 
@@ -655,13 +662,13 @@ slurp(sqlite3 *db, const char *path)
                 rc = sqlite3_step(stmt);
 
                 if (rc != SQLITE_DONE) {
-                        fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s", sqlite3_errmsg(db));
                         goto end;
                 }
 
                 sqlite3_finalize(stmt);
         } else {
-                fprintf(stderr, "Not loading empty file\n");
+                zprintf("Not loading empty file\n");
                 goto end;
         }
 
@@ -672,7 +679,7 @@ slurp(sqlite3 *db, const char *path)
         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 goto end;
         }
 
@@ -681,7 +688,7 @@ slurp(sqlite3 *db, const char *path)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                zprintf("execution failed: %s", sqlite3_errmsg(db));
                 goto end;
         }
         rc = 0;
@@ -720,7 +727,7 @@ spit(sqlite3 *db, const char *uuid, const char *path)
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -731,7 +738,7 @@ spit(sqlite3 *db, const char *uuid, const char *path)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_ROW) {
-                fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -767,7 +774,7 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
                         "ON note_tags.tag_id = tags.id "
                         "WHERE tags.body LIKE ?);";
         } else {
-                fprintf(stderr, "Invalid search type: %s\n", search_type);
+                zprintf("Invalid search type: %s\n", search_type);
                 return 1;
         }
 
@@ -775,7 +782,7 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -790,7 +797,7 @@ search(sqlite3 *db, const char *search_type, const char *search_word)
                 }
 
                 if (rc != SQLITE_ROW) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -822,7 +829,7 @@ int
 link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
         if (!strcmp(uuid_a, uuid_b)) {
-                fprintf(stderr, "Not supposed to link a note to itself!");
+                zprintf("Not supposed to link a note to itself!");
                 return SQLITE_OK;
         }
 
@@ -907,7 +914,7 @@ link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -931,7 +938,7 @@ link_notes(sqlite3 *db, const char *uuid_a, const char *uuid_b)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                zprintf("execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
         rc = 0;
@@ -990,7 +997,7 @@ links(sqlite3 *db, const char *uuid)
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1007,7 +1014,7 @@ links(sqlite3 *db, const char *uuid)
                 }
 
                 if (rc != SQLITE_ROW) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1080,7 +1087,7 @@ links(sqlite3 *db, const char *uuid)
         rc = sqlite3_prepare_v2(db, sql2, -1, &stmt2, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1097,7 +1104,7 @@ links(sqlite3 *db, const char *uuid)
                 }
 
                 if (rc != SQLITE_ROW) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1133,7 +1140,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1142,7 +1149,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "INSERT TAG - execution failed: %s\n", sqlite3_errmsg(db));
+                zprintf("INSERT TAG - execution failed: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1157,7 +1164,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
                 rc = sqlite3_prepare_v2(db, sql2, -1, &stmt2, 0);
 
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1166,7 +1173,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
                 rc = sqlite3_step(stmt2);
 
                 if (rc != SQLITE_ROW) {
-                        fprintf(stderr, "SELECT tag - execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("SELECT tag - execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1204,7 +1211,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
         rc = sqlite3_prepare_v2(db, sql3, -1, &stmt3, 0);
 
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1218,7 +1225,7 @@ tag(sqlite3 *db, const char *uuid, const char *tag_body)
         rc = sqlite3_step(stmt3);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "INSERT NOTE TAG - execution failed: %s\n", sqlite3_errmsg(db));
+                zprintf("INSERT NOTE TAG - execution failed: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
         rc = 0;
@@ -1253,7 +1260,7 @@ tags(sqlite3 *db, const char *uuid)
                         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
                         if (rc != SQLITE_OK) {
-                                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                                 return rc;
                         }
                 } else if (!strcmp(uuid, "tail")) {
@@ -1273,7 +1280,7 @@ tags(sqlite3 *db, const char *uuid)
                         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
                         if (rc != SQLITE_OK) {
-                                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                                 return rc;
                         }
                 } else {
@@ -1288,7 +1295,7 @@ tags(sqlite3 *db, const char *uuid)
                         rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
                         if (rc != SQLITE_OK) {
-                                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                                 return rc;
                         }
 
@@ -1300,7 +1307,7 @@ tags(sqlite3 *db, const char *uuid)
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
 
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1316,7 +1323,7 @@ tags(sqlite3 *db, const char *uuid)
                 }
 
                 if (rc != SQLITE_ROW) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1356,7 +1363,7 @@ delete_note(sqlite3 *db, const char *uuid)
         sqlite3_stmt *stmt2;
         rc = sqlite3_prepare_v2(db, sql2, -1, &stmt2, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1367,7 +1374,7 @@ delete_note(sqlite3 *db, const char *uuid)
         rc = sqlite3_step(stmt2);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                zprintf("execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
         rc = 0;
@@ -1385,7 +1392,7 @@ delete_tag(sqlite3 *db, const char *tag_body)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1394,7 +1401,7 @@ delete_tag(sqlite3 *db, const char *tag_body)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                zprintf("execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
         rc = 0;
@@ -1447,7 +1454,7 @@ delete_note_tag(sqlite3 *db, const char *uuid, const char *tag_body)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1461,7 +1468,7 @@ delete_note_tag(sqlite3 *db, const char *uuid, const char *tag_body)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                zprintf("execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
         rc = 0;
@@ -1475,7 +1482,7 @@ int
 delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
 {
         if (!strcmp(uuid_a, uuid_b)) {
-                fprintf(stderr, "Notes don't link to themselves!");
+                zprintf("Notes don't link to themselves!");
                 return SQLITE_OK;
         }
 
@@ -1513,7 +1520,7 @@ delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1537,7 +1544,7 @@ delete_link(sqlite3 *db, const char *uuid_a, const char *uuid_b)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
         rc = 0;
@@ -1571,7 +1578,7 @@ archive(sqlite3 *db, const char *uuid)
 
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1582,7 +1589,7 @@ archive(sqlite3 *db, const char *uuid)
         rc = sqlite3_step(stmt);
 
         if (rc != SQLITE_DONE) {
-                fprintf(stderr, "execution failed: %s", sqlite3_errmsg(db));
+                zprintf("execution failed: %s", sqlite3_errmsg(db));
                 return rc;
         }
         rc = 0;
@@ -1603,7 +1610,7 @@ diff_tags_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1631,7 +1638,7 @@ diff_notes_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1664,7 +1671,7 @@ diff_note_tags_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1697,7 +1704,7 @@ diff_note_links_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1723,7 +1730,7 @@ diff(sqlite3 *db, const char *path)
 
         rc = sqlite3_open_v2(path, &db2, SQLITE_OPEN_READONLY, NULL);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot open zkc database: %s\n", path);
+                zprintf("Cannot open zkc database: %s\n", path);
                 goto end;
         }
 
@@ -1732,8 +1739,8 @@ diff(sqlite3 *db, const char *path)
         char *sql = "SELECT uuid, hash FROM notes;";
         rc = sqlite3_exec(db2, sql, diff_notes_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to query notes\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to query notes\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -1743,8 +1750,8 @@ diff(sqlite3 *db, const char *path)
 
         rc = sqlite3_exec(db2, sql, diff_tags_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to query tags\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to query tags\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -1756,8 +1763,8 @@ diff(sqlite3 *db, const char *path)
 
         rc = sqlite3_exec(db2, sql, diff_note_tags_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to query note tags\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to query note tags\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -1769,8 +1776,8 @@ diff(sqlite3 *db, const char *path)
 
         rc = sqlite3_exec(db2, sql, diff_note_links_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to query note links\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to query note links\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -1796,7 +1803,7 @@ merge_notes_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1809,7 +1816,7 @@ merge_notes_callback(void *data, int argc, char **argv, char **col_names)
                 sqlite3_stmt *stmt2;
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1820,7 +1827,7 @@ merge_notes_callback(void *data, int argc, char **argv, char **col_names)
 
                 rc = sqlite3_step(stmt2);
                 if (rc != SQLITE_DONE) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1845,7 +1852,7 @@ merge_notes_callback(void *data, int argc, char **argv, char **col_names)
                         sqlite3_stmt *stmt2;
                         rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
                         if (rc != SQLITE_OK) {
-                                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                                 return rc;
                         }
 
@@ -1856,7 +1863,7 @@ merge_notes_callback(void *data, int argc, char **argv, char **col_names)
 
                         rc = sqlite3_step(stmt2);
                         if (rc != SQLITE_DONE) {
-                                fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                                zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                                 return rc;
                         }
 
@@ -1880,7 +1887,7 @@ merge_tags_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1894,7 +1901,7 @@ merge_tags_callback(void *data, int argc, char **argv, char **col_names)
                 sqlite3_stmt *stmt2;
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1902,7 +1909,7 @@ merge_tags_callback(void *data, int argc, char **argv, char **col_names)
 
                 rc = sqlite3_step(stmt2);
                 if (rc != SQLITE_DONE) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1928,7 +1935,7 @@ merge_note_tags_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1945,7 +1952,7 @@ merge_note_tags_callback(void *data, int argc, char **argv, char **col_names)
                 sqlite3_stmt *stmt2;
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1954,7 +1961,7 @@ merge_note_tags_callback(void *data, int argc, char **argv, char **col_names)
 
                 rc = sqlite3_step(stmt2);
                 if (rc != SQLITE_DONE) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -1980,7 +1987,7 @@ merge_links_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -1997,7 +2004,7 @@ merge_links_callback(void *data, int argc, char **argv, char **col_names)
                 sqlite3_stmt *stmt2;
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -2006,7 +2013,7 @@ merge_links_callback(void *data, int argc, char **argv, char **col_names)
 
                 rc = sqlite3_step(stmt2);
                 if (rc != SQLITE_DONE) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -2030,7 +2037,7 @@ merge_inbox_callback(void *data, int argc, char **argv, char **col_names)
         sqlite3_stmt *stmt;
         int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                 return rc;
         }
 
@@ -2045,7 +2052,7 @@ merge_inbox_callback(void *data, int argc, char **argv, char **col_names)
                 sqlite3_stmt *stmt2;
                 rc = sqlite3_prepare_v2(db, sql, -1, &stmt2, 0);
                 if (rc != SQLITE_OK) {
-                        fprintf(stderr, "Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+                        zprintf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
 
@@ -2053,7 +2060,7 @@ merge_inbox_callback(void *data, int argc, char **argv, char **col_names)
 
                 rc = sqlite3_step(stmt2);
                 if (rc != SQLITE_DONE) {
-                        fprintf(stderr, "execution failed: %s\n", sqlite3_errmsg(db));
+                        zprintf("execution failed: %s\n", sqlite3_errmsg(db));
                         return rc;
                 }
         }
@@ -2070,7 +2077,7 @@ merge(sqlite3 *db, const char *path)
 
         rc = sqlite3_open_v2(path, &db2, SQLITE_OPEN_READONLY, NULL);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Cannot open zkc database: %s\n", path);
+                zprintf("Cannot open zkc database: %s\n", path);
                 goto end;
         }
 
@@ -2078,8 +2085,8 @@ merge(sqlite3 *db, const char *path)
         char *sql = "SELECT uuid, hash, body, date, unixepoch(date) FROM notes;";
         rc = sqlite3_exec(db2, sql, merge_notes_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to merge notes\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to merge notes\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -2087,8 +2094,8 @@ merge(sqlite3 *db, const char *path)
         sql = "SELECT body FROM tags;";
         rc = sqlite3_exec(db2, sql, merge_tags_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to merge tags\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to merge tags\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -2098,8 +2105,8 @@ merge(sqlite3 *db, const char *path)
                 "INNER JOIN tags ON note_tags.tag_id = tags.id;";
         rc = sqlite3_exec(db2, sql, merge_note_tags_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to merge note tags\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to merge note tags\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -2109,8 +2116,8 @@ merge(sqlite3 *db, const char *path)
                 "INNER JOIN notes notes_b ON links.b_id = notes_b.id;";
         rc = sqlite3_exec(db2, sql, merge_links_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to merge note tags\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to merge note tags\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
@@ -2119,8 +2126,8 @@ merge(sqlite3 *db, const char *path)
                 "INNER JOIN notes ON inbox.note_id = notes.id;";
         rc = sqlite3_exec(db2, sql, merge_inbox_callback, db, &err_msg);
         if (rc != SQLITE_OK) {
-                fprintf(stderr, "Failed to merge inbox\n");
-                fprintf(stderr, "SQL Error: %s\n", err_msg);
+                zprintf("Failed to merge inbox\n");
+                zprintf("SQL Error: %s\n", err_msg);
                 sqlite3_free(err_msg);
         }
 
